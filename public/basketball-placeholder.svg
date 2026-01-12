@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <!-- Background Circle -->
+  <circle cx="200" cy="200" r="150" fill="#FF6B35" opacity="0.1"/>
+
+  <!-- Basketball -->
+  <circle cx="200" cy="200" r="120" fill="#FF6B35" stroke="#E85A2A" stroke-width="3"/>
+
+  <!-- Basketball Lines -->
+  <path d="M200 80 L200 320" stroke="#E85A2A" stroke-width="4" stroke-linecap="round"/>
+  <path d="M80 200 L320 200" stroke="#E85A2A" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Curved Lines -->
+  <path d="M200 80 Q120 140 120 200 Q120 260 200 320" stroke="#E85A2A" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M200 80 Q280 140 280 200 Q280 260 200 320" stroke="#E85A2A" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+  <!-- Highlight -->
+  <ellipse cx="160" cy="150" rx="30" ry="20" fill="white" opacity="0.2"/>
+
+  <!-- CBL Text -->
+  <text x="200" y="210" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800" fill="white">CBL</text>
+
+  <!-- Placeholder Text -->
+  <text x="200" y="360" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="12" fill="#888">Replace with actual image</text>
+</svg>
