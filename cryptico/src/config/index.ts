@@ -26,7 +26,7 @@ export const config = {
   supportEmail: import.meta.env.VITE_SUPPORT_EMAIL || 'support@cryptokiosk.my',
 
   // DuitNow QR Code (base64 or URL)
-  duitNowQrImage: import.meta.env.VITE_DUITNOW_QR_IMAGE || null,
+  duitNowQrImage: import.meta.env.VITE_DUITNOW_QR_IMAGE || '/duitnow-qr.png',
 
   // Transaction Limits (MYR)
   minAmount: Number(import.meta.env.VITE_MIN_AMOUNT) || 50,
