@@ -4,7 +4,12 @@ import type { NetworkType } from '../types'
 // All sensitive values come from environment variables
 
 export const config = {
-  // Telegram Bot Setup
+  // API Configuration (n8n webhooks)
+  apiUrl: import.meta.env.VITE_API_URL || 'https://alumist.alumga.com/webhook',
+  apiKey: import.meta.env.VITE_API_KEY || '',
+  adminApiKey: import.meta.env.VITE_ADMIN_API_KEY || '',
+
+  // Telegram Bot Setup (for client-side notifications - legacy)
   telegramBotToken: import.meta.env.VITE_TELEGRAM_BOT_TOKEN || '',
   telegramChatId: import.meta.env.VITE_TELEGRAM_CHAT_ID || '',
 
@@ -24,9 +29,11 @@ export const config = {
   // Network Fees (MYR)
   networkFees: {
     'TRC-20': 1.0,
-    'BEP-20': 2.5,
     'ERC-20': 15.0,
-    'POLYGON': 0.5,
+    BTC: 10.0,
+    ETH: 15.0,
+    SOL: 0.5,
+    ICP: 1.0,
   } as Record<NetworkType, number>,
 
   // Rate markup (percentage added to market rate)
@@ -49,4 +56,9 @@ export const isTelegramConfigured = (): boolean => {
     config.telegramBotToken !== 'your_bot_token_here' &&
     config.telegramChatId !== ''
   )
+}
+
+// Helper to check if API is configured
+export const isApiConfigured = (): boolean => {
+  return config.apiUrl !== '' && config.apiKey !== ''
 }

@@ -44,25 +44,42 @@ export function validateWalletAddress(
   }
 
   const trimmedAddress = address.trim()
+  const { addressPrefix, addressLength } = networkConfig
 
-  if (networkConfig.addressPrefix === 'T') {
-    // TRC-20 validation
-    if (!trimmedAddress.startsWith('T')) {
-      return { valid: false, error: 'TRC-20 address must start with T' }
+  // Check length
+  if (Array.isArray(addressLength)) {
+    const [minLen, maxLen] = addressLength
+    if (trimmedAddress.length < minLen || trimmedAddress.length > maxLen) {
+      return { valid: false, error: `${network} address must be ${minLen}-${maxLen} characters` }
     }
-    if (trimmedAddress.length !== 34) {
-      return { valid: false, error: 'TRC-20 address must be 34 characters' }
+  } else if (addressLength && trimmedAddress.length !== addressLength) {
+    return { valid: false, error: `${network} address must be ${addressLength} characters` }
+  }
+
+  // Check prefix
+  if (addressPrefix) {
+    if (Array.isArray(addressPrefix)) {
+      // Multiple valid prefixes (e.g., BTC: 1, 3, bc1)
+      const hasValidPrefix = addressPrefix.some(p => trimmedAddress.startsWith(p))
+      if (!hasValidPrefix) {
+        return { valid: false, error: `${network} address must start with ${addressPrefix.join(' or ')}` }
+      }
+    } else if (addressPrefix && !trimmedAddress.startsWith(addressPrefix)) {
+      return { valid: false, error: `${network} address must start with ${addressPrefix}` }
     }
-  } else if (networkConfig.addressPrefix === '0x') {
-    // EVM-based validation (BEP-20, ERC-20, Polygon)
-    if (!trimmedAddress.startsWith('0x')) {
-      return { valid: false, error: `${network} address must start with 0x` }
-    }
-    if (trimmedAddress.length !== 42) {
-      return { valid: false, error: `${network} address must be 42 characters` }
-    }
+  }
+
+  // Additional EVM validation (hex characters)
+  if (addressPrefix === '0x') {
     if (!/^0x[a-fA-F0-9]{40}$/.test(trimmedAddress)) {
       return { valid: false, error: 'Invalid address format' }
+    }
+  }
+
+  // SOL validation (base58 characters)
+  if (network === 'SOL') {
+    if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(trimmedAddress)) {
+      return { valid: false, error: 'Invalid Solana address format (base58 only)' }
     }
   }
 

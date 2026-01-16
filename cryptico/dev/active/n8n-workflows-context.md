@@ -1,15 +1,20 @@
 # N8N Workflows - Context Documentation
 
-**Last Updated:** 2026-01-16 4:45 PM MYT
-**Status:** ✅ ALL WORKFLOWS DEPLOYED & TESTED
+**Last Updated:** 2026-01-16 5:15 PM MYT
+**Status:** ✅ BACKEND DEPLOYED | 🔄 FRONTEND INTEGRATION READY
 
 ## Current Implementation State
 
 ### Completed ✅
 - All 7 Cryptico n8n workflows converted from Supabase to PostgreSQL
 - All workflows (wf-01 through wf-06) tested and verified working
-- Database schema updated for new coins
+- Database schema updated for new coins (BTC, ETH, SOL, ICP, USDT, USDC)
 - Credential IDs updated in all workflow JSON files
+- **Frontend types/constants updated for new coins**
+- **API client rewritten for n8n webhook integration**
+
+### In Progress 🔄
+- Frontend needs to be connected to live n8n backend (currently using localStorage)
 
 ### Workflow Test Results
 
@@ -70,58 +75,62 @@
 - `crypto_prices` - Current prices for 6 coins
 - `orders` - Customer orders with status tracking
 
-## Key Decisions Made This Session
+## Frontend Changes (This Session)
+
+### Modified Files
+
+| File | Changes |
+|------|---------|
+| `src/types/index.ts` | Updated CryptoSymbol (BTC/ETH/SOL/ICP), NetworkType for native chains |
+| `src/lib/constants.ts` | New CRYPTO_ASSETS, NETWORKS with multi-prefix address validation |
+| `src/config/index.ts` | Added apiUrl, apiKey, adminApiKey for n8n webhooks |
+| `src/lib/api.ts` | Complete rewrite for n8n webhook API (X-API-Key/X-Admin-Key auth) |
+| `src/lib/utils.ts` | Updated address validation for BTC (26-62 chars), SOL (32-44), ICP |
+
+### Key Type Changes
+
+```typescript
+// CryptoSymbol: 'USDT' | 'USDC' | 'BTC' | 'ETH' | 'SOL' | 'ICP'
+// NetworkType: 'TRC-20' | 'ERC-20' | 'BTC' | 'ETH' | 'SOL' | 'ICP'
+
+// Network.addressPrefix changed: string → string | string[]
+// Network.addressLength changed: number → number | [number, number]
+```
+
+### Address Validation Rules
+
+| Network | Prefix | Length |
+|---------|--------|--------|
+| TRC-20 | T | 34 |
+| ERC-20 | 0x | 42 |
+| BTC | 1, 3, bc1 | 26-62 |
+| ETH | 0x | 42 |
+| SOL | (base58) | 32-44 |
+| ICP | (principal) | 27-63 |
+
+## Key Decisions Made
 
 1. **Path parameters not supported** - n8n deployment doesn't match `:param` style webhooks
    - Fix: wf-04 changed from `/order/lookup/:orderId` to `/order/lookup?id=ORDERID`
 
-2. **PostgreSQL credential missing host** - Credential only had database, user, password
-   - Fix: Updated credential data to include `host: localhost`
+2. **Multi-prefix address validation** - Bitcoin addresses can start with 1, 3, or bc1
+   - Fix: Changed Network.addressPrefix from string to `string | string[]`
 
-3. **idempotency_key required** - Orders table has NOT NULL constraint
-   - Fix: wf-02 now generates idempotency_key in order generation node
+3. **Variable length validation** - BTC, SOL, ICP have range-based lengths
+   - Fix: Changed Network.addressLength from number to `number | [number, number]`
 
-4. **55-format-response node reference** - Was reading from wrong input ($json.order)
-   - Fix: Changed to `$('30-format-telegram').first().json.order`
+4. **API authentication model** - n8n webhooks use header-based auth
+   - X-API-Key for public order submissions
+   - X-Admin-Key for admin operations
+   - No JWT/sessions needed
 
-5. **Database CHECK constraints** - Old constraints had BNB/MATIC, not new coins
-   - Fix: Updated via postgres superuser to support BTC/ETH/SOL/ICP
+## Next Steps (Priority Order)
 
-## Files Modified This Session
-
-| File | Changes |
-|------|---------|
-| `wf-02-order-submit.json` | Added idempotency_key, fixed response node reference, updated credentials |
-| `wf-03-status-update.json` | Fixed IF v2 syntax, updated credentials, fixed network explorers |
-| `wf-04-order-lookup.json` | Changed from path params to query params |
-| `wf-05-admin-orders.json` | Updated credentials |
-| `wf-06-admin-stats.json` | Updated credentials |
-| `wf-07-error-handler.json` | Updated credentials |
-
-## Issues Discovered & Fixed
-
-1. **wf-04 webhook 404** - Parameterized paths not matching
-   - Root cause: n8n webhook router doesn't match `:orderId` style paths
-   - Fix: Changed to query parameter `?id=`
-
-2. **wf-02 returning empty response** - `55-format-response` reading wrong data
-   - Root cause: After Telegram node, `$json` contains Telegram API response
-   - Fix: Explicitly reference `$('30-format-telegram').first().json.order`
-
-3. **wf-06 returning empty** - PostgreSQL node query working but no orders
-   - Root cause: Database had 0 orders initially
-   - Fix: Inserted test order, now returns data correctly
-
-4. **PostgreSQL credential "Database not ready"** - Missing host in credential
-   - Root cause: n8n encrypted credential didn't include host field
-   - Fix: Re-encrypted credential with all fields (host, database, user, password)
-
-## Next Steps
-
-1. **Connect frontend to n8n webhooks** - Update React app API calls
-2. **Update frontend coins** - Ensure UI shows BTC, ETH, SOL, ICP, USDT, USDC
-3. **Add error handling to frontend** - Handle API errors gracefully
-4. **Test complete user flow** - Order submission through completion
+1. **Wire up frontend to API** - Replace localStorage calls in `useKiosk.ts` with API client
+2. **Test complete order flow** - Submit order via UI, verify in database
+3. **Add loading states** - Show spinners during API calls
+4. **Add error handling UI** - User-friendly API error messages
+5. **Deploy frontend** - Configure production environment variables
 
 ## Test Commands
 
@@ -137,60 +146,32 @@ curl -s "https://alumist.alumga.com/webhook/admin/stats" \
 curl -s "https://alumist.alumga.com/webhook/admin/orders" \
   -H "X-Admin-Key: 7749a10b62c81a4c9b8f429b80fc9b797997506345a26ca802857b7049c5165d" | jq .
 
-# Test order submit (with current timestamp)
+# Test order submit
 NOW_MS=$(($(date +%s) * 1000)) && curl -s -X POST "https://alumist.alumga.com/webhook/order/submit" \
   -H "X-API-Key: 77768a4aa5da6d70a1cd5e5adc7e28ef59858a320b1a0b5133fc5f1ad5c5165d" \
   -H "Content-Type: application/json" \
   -d '{"crypto":"ETH","network":"ERC-20","amountMYR":100,"customerName":"Test","contactType":"email","contact":"test@test.com","walletAddress":"0x1234567890123456789012345678901234567890","rateLockTimestamp":'$NOW_MS',"currentRate":13711.52,"baseRate":13442.67}' | jq .
 ```
 
-## VPS Environment Variables
+## Handoff Notes for Next Session
 
+### Current State
+- Backend: ✅ Fully deployed and tested
+- Frontend: 🔄 Types/constants/API client updated, NOT yet connected
+
+### What Needs Doing
+1. Open `src/hooks/useKiosk.ts` - replace `storage.saveOrder()` calls with `api.submitOrder()`
+2. Open `src/components/admin/AdminDashboard.tsx` - replace localStorage with API calls
+3. Update `src/components/kiosk/screens/LookupScreen.tsx` - use `api.lookupOrder()`
+
+### Files to Focus On
+- `src/hooks/useKiosk.ts` - Main state hook, needs API integration
+- `src/components/admin/AdminDashboard.tsx` - Admin panel, needs API integration
+- `src/lib/storage.ts` - Current localStorage implementation (to be replaced)
+
+### Environment Variables Needed for Production
 ```bash
-# /home/n8n/.env (relevant entries)
-CRYPTICO_DB_HOST=localhost
-CRYPTICO_DB_PORT=5432
-CRYPTICO_DB_NAME=cryptico_kiosk
-CRYPTICO_DB_USER=alumist
-CRYPTICO_DB_PASSWORD=TVw2xISldsFov7O5ksjr7SYYwazR4if
-CRYPTICO_TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN_REDACTED
-CRYPTICO_TELEGRAM_CHAT_ID=5426763403
-CRYPTICO_API_KEY=77768a4aa5da6d70a1cd5e5adc7e28ef59858a320b1a0b5133fc5f1ad578be4e
-CRYPTICO_ADMIN_KEY=7749a10b62c81a4c9b8f429b80fc9b797997506345a26ca802857b7049c5165d
-CRYPTICO_RATE_MARKUP_PERCENT=2
-```
-
-## Updating Workflows via Python
-
-When shell escaping issues occur, use Python to update workflows:
-
-```python
-# On VPS: ssh root@45.159.230.42 -p 1511
-python3 << PYTHON
-import json
-import psycopg2
-
-with open("/tmp/wf-XX-workflow.json", "r") as f:
-    wf = json.load(f)
-
-conn = psycopg2.connect(
-    host="localhost",
-    database="alumist_n8n",
-    user="alumist",
-    password="TVw2xISldsFov7O5ksjr7SYYwazR4if"
-)
-cur = conn.cursor()
-
-cur.execute("""
-    UPDATE n8n.workflow_entity
-    SET nodes = %s::jsonb, connections = %s::jsonb
-    WHERE id = %s
-""", (json.dumps(wf["nodes"]), json.dumps(wf["connections"]), "WORKFLOW_ID"))
-
-conn.commit()
-print(f"Updated {cur.rowcount} rows")
-PYTHON
-
-# Then restart n8n
-pm2 restart 16
+VITE_API_URL=https://alumist.alumga.com/webhook
+VITE_API_KEY=77768a4aa5da6d70a1cd5e5adc7e28ef59858a320b1a0b5133fc5f1ad5c5165d
+VITE_ADMIN_API_KEY=7749a10b62c81a4c9b8f429b80fc9b797997506345a26ca802857b7049c5165d
 ```

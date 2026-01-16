@@ -8,19 +8,19 @@ export interface CryptoAsset {
   networks: NetworkType[]
 }
 
-export type CryptoSymbol = 'USDT' | 'USDC' | 'BNB' | 'MATIC'
+export type CryptoSymbol = 'USDT' | 'USDC' | 'BTC' | 'ETH' | 'SOL' | 'ICP'
 
 // Network Types
 export interface Network {
   name: string
   icon: string
-  addressPrefix: string
-  addressLength: number
+  addressPrefix: string | string[]
+  addressLength: number | [number, number] // single length or [min, max] range
   explorer: string
   confirmations: string
 }
 
-export type NetworkType = 'TRC-20' | 'BEP-20' | 'ERC-20' | 'POLYGON'
+export type NetworkType = 'TRC-20' | 'ERC-20' | 'BTC' | 'ETH' | 'SOL' | 'ICP'
 
 // Order Types
 export type OrderStatus = 'pending' | 'approved' | 'completed' | 'rejected'
