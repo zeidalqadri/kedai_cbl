@@ -11,7 +11,7 @@ import { config } from '../config'
 import { CRYPTO_ASSETS } from '../lib/constants'
 import { fetchPrices, PRICE_REFRESH_INTERVAL, calculateCryptoAmount } from '../lib/prices'
 import { orderApi } from '../lib/api'
-import { validateWalletAddress } from '../lib/utils'
+import { validateWalletAddress, generateOrderId } from '../lib/utils'
 
 interface UseKioskReturn {
   // Screen state
@@ -225,6 +225,8 @@ export function useKiosk(): UseKioskReturn {
     }
 
     setError('')
+    // Generate temporary order ID for display (API may return different ID)
+    setOrderId(generateOrderId())
     setScreen('payment')
   }, [userDetails, selectedNetwork])
 
