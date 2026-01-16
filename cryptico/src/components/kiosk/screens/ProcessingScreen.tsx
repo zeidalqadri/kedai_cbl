@@ -3,7 +3,8 @@ import type { Order } from '../../../types'
 import { CRYPTO_ASSETS, NETWORKS } from '../../../lib/constants'
 import { config } from '../../../config'
 import { formatMYR, formatCrypto } from '../../../lib/utils'
-import { orderStorage } from '../../../lib/storage'
+import { orderApi } from '../../../lib/api'
+import { ui, cx, text, spinner } from '../../../lib/ui-primitives'
 import { ExternalLinkIcon } from '../../icons'
 import type { useKiosk } from '../../../hooks/useKiosk'
 
@@ -15,18 +16,51 @@ export function ProcessingScreen({ kiosk }: ProcessingScreenProps) {
   const { selectedCrypto, selectedNetwork, currentOrder, userDetails, orderId, resetFlow } = kiosk
   const [polledOrder, setPolledOrder] = useState<Order | null>(null)
 
-  // Poll for status updates
+  // Poll for status updates via API
   useEffect(() => {
+    let alive = true
+
     const poll = async () => {
-      const order = await orderStorage.getById(orderId)
-      if (order && order.status !== 'pending') {
-        setPolledOrder(order)
+      if (!orderId) return
+
+      const result = await orderApi.lookup(orderId)
+      if (!alive) return
+
+      if (result.success && result.data?.order) {
+        const apiOrder = result.data.order
+        // Convert API response to Order format
+        if (apiOrder.status !== 'pending') {
+          setPolledOrder({
+            id: apiOrder.id,
+            crypto: apiOrder.crypto,
+            network: apiOrder.network,
+            amountMYR: apiOrder.amountMYR,
+            amountCrypto: apiOrder.amountCrypto,
+            networkFee: apiOrder.networkFee,
+            rate: apiOrder.rate,
+            customer: {
+              name: apiOrder.customerName,
+              contactType: 'telegram',
+              contact: '',
+              walletAddress: apiOrder.walletAddress,
+            },
+            paymentRef: '',
+            hasProofImage: false,
+            status: apiOrder.status,
+            txHash: apiOrder.txHash,
+            createdAt: new Date(apiOrder.createdAt).getTime(),
+            updatedAt: new Date(apiOrder.updatedAt).getTime(),
+          })
+        }
       }
     }
 
     poll()
     const interval = setInterval(poll, 5000)
-    return () => clearInterval(interval)
+    return () => {
+      alive = false
+      clearInterval(interval)
+    }
   }, [orderId])
 
   if (!selectedCrypto || !selectedNetwork) return null
@@ -44,12 +78,12 @@ export function ProcessingScreen({ kiosk }: ProcessingScreenProps) {
             <>
               <div
                 className="w-20 h-20 rounded-full flex items-center justify-center mb-6 mx-auto"
-                style={{ backgroundColor: `${asset.color}30` }}
+                style={{ backgroundColor: `${asset.color}33` }}
               >
-                <span className="text-4xl">✓</span>
+                <span className="text-4xl" aria-hidden>✓</span>
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Payment Confirmed!</h2>
-              <p className="text-gray-400 mb-8">
+              <h2 className="text-2xl font-bold text-white tracking-tight mb-2">Payment Confirmed!</h2>
+              <p className={cx("mb-8", text.secondary)}>
                 {polledOrder.status === 'completed'
                   ? 'Your crypto has been sent'
                   : 'Processing your crypto transfer'}
@@ -57,28 +91,28 @@ export function ProcessingScreen({ kiosk }: ProcessingScreenProps) {
             </>
           ) : (
             <>
-              <div className="w-20 h-20 rounded-full bg-red-500/30 flex items-center justify-center mb-6 mx-auto">
-                <span className="text-4xl">✗</span>
+              <div className="w-20 h-20 rounded-full bg-red-500/20 border border-red-500/20 flex items-center justify-center mb-6 mx-auto">
+                <span className="text-4xl" aria-hidden>✗</span>
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Order Declined</h2>
-              <p className="text-gray-400 mb-8">Please contact support for assistance</p>
+              <h2 className="text-2xl font-bold text-white tracking-tight mb-2">Order Declined</h2>
+              <p className={cx("mb-8", text.secondary)}>Please contact support for assistance</p>
             </>
           )}
 
-          <div className="bg-gray-800/50 rounded-2xl p-5 border border-gray-700 mb-6 text-left">
+          <div className={cx(ui.card, "p-5 mb-6 text-left")}>
             <div className="text-sm space-y-3">
               <div className="flex justify-between">
-                <span className="text-gray-400">Order ID</span>
+                <span className={text.secondary}>Order ID</span>
                 <span className="text-white font-mono">{polledOrder.id}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Amount Paid</span>
+                <span className={text.secondary}>Amount Paid</span>
                 <span className="text-white">{formatMYR(polledOrder.amountMYR)}</span>
               </div>
               {isApproved && (
                 <>
                   <div className="flex justify-between">
-                    <span className="text-gray-400">
+                    <span className={text.secondary}>
                       Crypto {polledOrder.status === 'completed' ? 'Sent' : 'Amount'}
                     </span>
                     <span className="font-mono" style={{ color: asset.color }}>
@@ -86,21 +120,21 @@ export function ProcessingScreen({ kiosk }: ProcessingScreenProps) {
                     </span>
                   </div>
                   {polledOrder.txHash && (
-                    <div className="pt-2 border-t border-gray-700">
-                      <span className="text-gray-400 text-xs block mb-1">Transaction Hash</span>
+                    <div className="pt-2 border-t border-white/10">
+                      <span className={cx("text-xs block mb-1", text.tertiary)}>Transaction Hash</span>
                       <a
                         href={`${NETWORKS[polledOrder.network].explorer}${polledOrder.txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-400 text-xs font-mono break-all hover:underline flex items-center gap-1"
+                        className="text-indigo-200 text-xs font-mono break-all hover:underline inline-flex items-center gap-1"
                       >
                         {polledOrder.txHash.slice(0, 20)}...{polledOrder.txHash.slice(-10)}
                         <ExternalLinkIcon />
                       </a>
                     </div>
                   )}
-                  <div className="pt-2 border-t border-gray-700">
-                    <span className="text-gray-400 text-xs block mb-1">To Wallet</span>
+                  <div className="pt-2 border-t border-white/10">
+                    <span className={cx("text-xs block mb-1", text.tertiary)}>To Wallet</span>
                     <span className="text-white font-mono text-xs break-all">
                       {polledOrder.customer.walletAddress}
                     </span>
@@ -112,12 +146,12 @@ export function ProcessingScreen({ kiosk }: ProcessingScreenProps) {
 
           <button
             onClick={resetFlow}
-            className="w-full py-4 rounded-2xl font-bold text-lg bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+            className={cx(ui.btnBase, "w-full py-4 rounded-2xl font-bold text-lg bg-white/10 hover:bg-white/15")}
           >
             Done
           </button>
 
-          <p className="text-gray-600 text-xs mt-4">
+          <p className={cx("text-xs mt-4", text.disabled)}>
             Questions? Contact {config.supportTelegram}
           </p>
         </div>
@@ -130,50 +164,50 @@ export function ProcessingScreen({ kiosk }: ProcessingScreenProps) {
     <div className="flex flex-col items-center justify-center h-full px-6 py-8">
       <div className="text-center max-w-sm">
         <div className="relative mb-8">
-          <div className="w-20 h-20 border-4 border-gray-700 border-t-blue-500 rounded-full animate-spin mx-auto" />
+          <div className={cx(spinner.large, spinner.base, "mx-auto")} />
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-2xl">⏳</span>
+            <span className="text-2xl" aria-hidden>⏳</span>
           </div>
         </div>
 
-        <h2 className="text-2xl font-bold text-white mb-2">Verifying Payment</h2>
-        <p className="text-gray-400 mb-8">We're checking your payment</p>
+        <h2 className="text-2xl font-bold text-white tracking-tight mb-2">Verifying Payment</h2>
+        <p className={cx("mb-8", text.secondary)}>We're checking your payment</p>
 
-        <div className="bg-gray-800/50 rounded-2xl p-5 border border-gray-700 mb-6">
+        <div className={cx(ui.card, "p-5 mb-6")}>
           <div className="text-sm space-y-3">
             <div className="flex justify-between">
-              <span className="text-gray-400">Order ID</span>
+              <span className={text.secondary}>Order ID</span>
               <span className="text-white font-mono">{orderId}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-400">Amount</span>
+              <span className={text.secondary}>Amount</span>
               <span className="text-white">{formatMYR(currentOrder?.amountMYR || 0)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-400">Crypto</span>
+              <span className={text.secondary}>Crypto</span>
               <span className="font-mono" style={{ color: asset.color }}>
                 {formatCrypto(currentOrder?.amountCrypto || 0, 4)} {selectedCrypto}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-400">Network</span>
+              <span className={text.secondary}>Network</span>
               <span className="text-white">{selectedNetwork}</span>
             </div>
           </div>
         </div>
 
         <div className="space-y-2 text-sm">
-          <p className="text-gray-500">
+          <p className={text.tertiary}>
             We'll contact you via {userDetails.contactType === 'telegram' ? 'Telegram' : 'email'}
           </p>
-          <p className="text-gray-600 text-xs">
+          <p className={cx("text-xs", text.disabled)}>
             Need help? Contact {config.supportTelegram}
           </p>
         </div>
 
         <button
           onClick={resetFlow}
-          className="mt-8 px-6 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors"
+          className={cx(ui.btnBase, ui.btnGhost, "mt-8 px-6 py-3")}
         >
           Start New Order
         </button>
