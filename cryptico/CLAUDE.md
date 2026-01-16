@@ -101,7 +101,11 @@ Copy `.env.example` to `.env` and configure:
 | Network | Prefix | Length |
 |---------|--------|--------|
 | TRC-20  | T      | 34     |
-| BEP-20/ERC-20/POLYGON | 0x | 42 |
+| ERC-20  | 0x     | 42     |
+| BTC     | 1, 3, bc1 | 26-62 |
+| ETH     | 0x     | 42     |
+| SOL     | (base58) | 32-44 |
+| ICP     | (principal) | 27-63 |
 
 ---
 
@@ -216,21 +220,48 @@ Copy `.env.example` to `.env` and configure:
 
 ---
 
-## N8N Workflows (Backend)
+## N8N Workflows (Backend) ✅ DEPLOYED & TESTED
 
 The backend is powered by n8n workflows on `alumist-n8n` VPS (`ssh root@45.159.230.42 -p 1511`).
 
-| Workflow | Description | Status |
-|----------|-------------|--------|
-| wf-01-price-feed | CoinGecko price updates every 5 min | Active |
-| wf-02-order-submit | Customer order submission | Active |
-| wf-03-status-update | Admin approve/reject/complete | Active |
-| wf-04-order-lookup | Customer order tracking | Active |
-| wf-05-admin-orders | Paginated order list | Active |
-| wf-06-admin-stats | Dashboard statistics | Active |
-| wf-07-error-handler | Central error logging | Inactive |
+| Workflow | ID | Endpoint | Status |
+|----------|-----|----------|--------|
+| wf-01-price-feed | IVUYUXry0mrZa4IX | Schedule (5 min) | ✅ Active |
+| wf-02-order-submit | 6Hqe4GtzyFjt3Ohx | `POST /webhook/order/submit` | ✅ Tested |
+| wf-03-status-update | KlFiRgwBWe4El78q | `POST /webhook/order/status` | ✅ Tested |
+| wf-04-order-lookup | JiG4zLRi1kBYKpYP | `GET /webhook/order/lookup?id=ORDERID` | ✅ Tested |
+| wf-05-admin-orders | uNwjBIjVYGXh46nL | `GET /webhook/admin/orders` | ✅ Tested |
+| wf-06-admin-stats | GniwbrtaChMXcSaE | `GET /webhook/admin/stats` | ✅ Tested |
+| wf-07-error-handler | owoBS0uJhf8JPcaP | Error workflow | ⏸️ Inactive |
+
+### API Authentication
+
+| Header | Value | Used By |
+|--------|-------|---------|
+| `X-API-Key` | `77768a4aa5da6d70a1cd5e5adc7e28ef59858a320b1a0b5133fc5f1ad5c5165d` | wf-02 |
+| `X-Admin-Key` | `7749a10b62c81a4c9b8f429b80fc9b797997506345a26ca802857b7049c5165d` | wf-03, wf-05, wf-06 |
+
+### Database Credentials
+
+| Database | Host | User | Password |
+|----------|------|------|----------|
+| `cryptico_kiosk` | localhost | alumist | `TVw2xISldsFov7O5ksjr7SYYwazR4if` |
+| `alumist_n8n` | localhost | alumist | (same) |
+
+### N8N Credential IDs
+
+| Credential | ID | Type |
+|------------|-----|------|
+| Cryptico PostgreSQL | `XBVFwEM8RKk32yyj` | postgres |
+| Cryptico API Key | `B9IPRA0h6bahkCwZ` | httpHeaderAuth |
+| Cryptico Admin Key | `L7j6V9fwqAW2mVNn` | httpHeaderAuth |
 
 **N8N Access:** `https://alumist.alumga.com/projects/CcNtl9Ch6q6lBF14/folders/RxsaUrL1CV9ey1qX/workflows`
+
+### Known Limitations
+
+- **Path parameters not supported**: n8n deployment doesn't match `:param` style paths. Use query params instead.
+- **wf-04 uses `?id=` not `/lookup/:orderId`**: Changed due to webhook routing limitation.
 
 ---
 
@@ -243,3 +274,6 @@ The backend is powered by n8n workflows on `alumist-n8n` VPS (`ssh root@45.159.2
 | 2026-01-16 | **N8N Backend**: All 7 workflows converted from Supabase to PostgreSQL |
 | 2026-01-16 | **Coins Updated**: Changed from BNB/MATIC to BTC/ETH/SOL/ICP |
 | 2026-01-16 | **Price Feed**: Fixed IF node v2 syntax, per-coin error detection, Telegram alerts |
+| 2026-01-16 | **All Workflows Tested**: wf-02 through wf-06 deployed and verified working |
+| 2026-01-16 | **wf-04 Fix**: Changed from path params to query params due to n8n limitation |
+| 2026-01-16 | **DB Schema Fix**: Updated orders table CHECK constraints for new coins |
