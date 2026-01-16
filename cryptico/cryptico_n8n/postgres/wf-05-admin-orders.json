@@ -1,0 +1,76 @@
+{
+  "name": "Cryptico-ATM-05-Admin-Orders",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "admin/orders",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "01-trigger-webhook",
+      "name": "01-trigger-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "cryptico-admin-orders",
+      "credentials": { "httpHeaderAuth": { "id": "ADMIN_HEADER_AUTH_CREDENTIAL_ID", "name": "Cryptico Admin Key" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const request = $input.first().json;\nconst query = request.query || {};\nconst filters = {\n  status: query.status || null,\n  crypto: query.crypto || null,\n  limit: Math.min(Number(query.limit) || 50, 100),\n  offset: Number(query.offset) || 0\n};\n\nreturn [{ json: { filters: filters } }];"
+      },
+      "id": "05-parse-query",
+      "name": "05-parse-query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT * FROM orders ORDER BY created_at DESC",
+        "options": {}
+      },
+      "id": "15-fetch-orders",
+      "name": "15-fetch-orders",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [700, 300],
+      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Cryptico PostgreSQL" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const filters = $('05-parse-query').first().json.filters;\nlet orders = $input.all().map(i => i.json);\n\nif (filters.status) orders = orders.filter(o => o.status === filters.status);\nif (filters.crypto) orders = orders.filter(o => o.crypto === filters.crypto);\n\nconst total = orders.length;\nconst paginated = orders.slice(filters.offset, filters.offset + filters.limit);\n\nreturn [{ json: { orders: paginated, pagination: { total: total, limit: filters.limit, offset: filters.offset, hasMore: (filters.offset + filters.limit) < total } } }];"
+      },
+      "id": "20-filter-paginate",
+      "name": "20-filter-paginate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"orders\": {{ JSON.stringify($json.orders) }},\n  \"pagination\": {{ JSON.stringify($json.pagination) }}\n}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "25-reply-success",
+      "name": "25-reply-success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1140, 300]
+    }
+  ],
+  "connections": {
+    "01-trigger-webhook": { "main": [[ { "node": "05-parse-query", "type": "main", "index": 0 } ]] },
+    "05-parse-query": { "main": [[ { "node": "15-fetch-orders", "type": "main", "index": 0 } ]] },
+    "15-fetch-orders": { "main": [[ { "node": "20-filter-paginate", "type": "main", "index": 0 } ]] },
+    "20-filter-paginate": { "main": [[ { "node": "25-reply-success", "type": "main", "index": 0 } ]] }
+  },
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true, "errorWorkflow": "Cryptico-ATM-07-Error-Handler" },
+  "tags": [{ "name": "cryptico-atm" }, { "name": "admin-orders" }]
+}

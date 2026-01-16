@@ -1,0 +1,182 @@
+{
+  "name": "Cryptico-ATM-04-Order-Lookup",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "order/lookup/:orderId",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "01-trigger-webhook",
+      "name": "01-trigger-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "cryptico-order-lookup"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Extract and validate order ID from path\nconst request = $input.first().json;\nlet orderId = request.params?.orderId || request.orderId || '';\n\n// Clean up order ID\norderId = orderId.toString().trim().toUpperCase();\n\n// Validate format (CK + alphanumeric)\nconst isValid = /^CK[A-Z0-9]{8,15}$/.test(orderId);\n\nreturn [{\n  json: {\n    orderId: orderId,\n    isValid: isValid,\n    error: isValid ? null : 'Invalid order ID format. Expected format: CK followed by 8-15 alphanumeric characters.'\n  }\n}];"
+      },
+      "id": "05-validate-id",
+      "name": "05-validate-id",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "06-validation-gate",
+      "name": "06-validation-gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "orders",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "equals",
+              "keyValue": "={{ $json.orderId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "id": "10-fetch-order",
+      "name": "10-fetch-order",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [920, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "11-order-exists",
+      "name": "11-order-exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1140, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Sanitize response - remove sensitive admin-only fields\nconst order = $input.first().json;\n\nconst NETWORK_EXPLORERS = {\n  'TRC-20': 'https://tronscan.org/#/transaction/',\n  'BEP-20': 'https://bscscan.com/tx/',\n  'ERC-20': 'https://etherscan.io/tx/',\n  'POLYGON': 'https://polygonscan.com/tx/'\n};\n\nconst STATUS_DISPLAY = {\n  'pending': { label: 'Pending Verification', emoji: '⏳', description: 'Your payment is being verified by our team.' },\n  'approved': { label: 'Approved - Processing', emoji: '✅', description: 'Payment verified! Your crypto is being sent.' },\n  'completed': { label: 'Completed', emoji: '🎉', description: 'Transaction complete! Check your wallet.' },\n  'rejected': { label: 'Rejected', emoji: '❌', description: 'Payment could not be verified. Please contact support.' },\n  'cancelled': { label: 'Cancelled', emoji: '🚫', description: 'This order has been cancelled.' }\n};\n\nconst statusInfo = STATUS_DISPLAY[order.status] || STATUS_DISPLAY['pending'];\n\nconst sanitized = {\n  id: order.id,\n  status: order.status,\n  statusDisplay: statusInfo,\n  crypto: order.crypto,\n  network: order.network,\n  amountMYR: order.amount_myr,\n  amountCrypto: order.amount_crypto,\n  networkFee: order.network_fee,\n  rate: order.rate,\n  customerName: order.customer_name,\n  walletAddress: order.wallet_address ? \n    order.wallet_address.slice(0, 8) + '...' + order.wallet_address.slice(-6) : null,\n  createdAt: order.created_at,\n  updatedAt: order.updated_at\n};\n\n// Only include txHash if completed\nif (order.status === 'completed' && order.tx_hash) {\n  sanitized.txHash = order.tx_hash;\n  sanitized.txExplorerUrl = (NETWORK_EXPLORERS[order.network] || '') + order.tx_hash;\n}\n\nreturn [{ json: sanitized }];"
+      },
+      "id": "15-sanitize-response",
+      "name": "15-sanitize-response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"order\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Cache-Control", "value": "no-store" }
+            ]
+          }
+        }
+      },
+      "id": "20-reply-success",
+      "name": "20-reply-success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1580, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": false,\n  \"error_code\": \"INVALID_ID\",\n  \"message\": \"{{ $json.error }}\"\n}",
+        "options": { "responseCode": 400 }
+      },
+      "id": "99-reply-invalid-id",
+      "name": "99-reply-invalid-id",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"ok\": false,\n  \"error_code\": \"NOT_FOUND\",\n  \"message\": \"Order not found. Please check the order ID and try again.\"\n}",
+        "options": { "responseCode": 404 }
+      },
+      "id": "99-reply-not-found",
+      "name": "99-reply-not-found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 300]
+    }
+  ],
+  "connections": {
+    "01-trigger-webhook": {
+      "main": [[ { "node": "05-validate-id", "type": "main", "index": 0 } ]]
+    },
+    "05-validate-id": {
+      "main": [[ { "node": "06-validation-gate", "type": "main", "index": 0 } ]]
+    },
+    "06-validation-gate": {
+      "main": [
+        [ { "node": "10-fetch-order", "type": "main", "index": 0 } ],
+        [ { "node": "99-reply-invalid-id", "type": "main", "index": 0 } ]
+      ]
+    },
+    "10-fetch-order": {
+      "main": [[ { "node": "11-order-exists", "type": "main", "index": 0 } ]]
+    },
+    "11-order-exists": {
+      "main": [
+        [ { "node": "15-sanitize-response", "type": "main", "index": 0 } ],
+        [ { "node": "99-reply-not-found", "type": "main", "index": 0 } ]
+      ]
+    },
+    "15-sanitize-response": {
+      "main": [[ { "node": "20-reply-success", "type": "main", "index": 0 } ]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "errorWorkflow": "Cryptico-ATM-07-Error-Handler"
+  },
+  "tags": [
+    { "name": "cryptico-atm" },
+    { "name": "order-lookup" }
+  ],
+  "versionId": "1.0.0"
+}

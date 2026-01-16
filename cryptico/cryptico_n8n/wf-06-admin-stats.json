@@ -1,0 +1,138 @@
+{
+  "name": "Cryptico-ATM-06-Admin-Stats",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "admin/stats",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "01-trigger-webhook",
+      "name": "01-trigger-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "cryptico-admin-stats"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Auth check\nconst request = $input.first().json;\nconst headers = request.$headers || {};\n\nconst ADMIN_API_KEY = $env.ADMIN_API_KEY;\nconst providedKey = headers['x-admin-key'] || headers['X-Admin-Key'];\n\nif (!providedKey || providedKey !== ADMIN_API_KEY) {\n  return [{\n    json: {\n      isAuthorized: false,\n      error: 'Invalid or missing admin API key'\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    isAuthorized: true\n  }\n}];"
+      },
+      "id": "05-auth-check",
+      "name": "05-auth-check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isAuthorized }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "06-auth-gate",
+      "name": "06-auth-gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "orders",
+        "returnAll": true
+      },
+      "id": "10-fetch-all-orders",
+      "name": "10-fetch-all-orders",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [920, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Calculate comprehensive stats\nconst orders = $input.all().map(i => i.json);\nconst now = new Date();\nconst today = new Date(now.getFullYear(), now.getMonth(), now.getDate());\nconst thisWeekStart = new Date(today);\nthisWeekStart.setDate(today.getDate() - today.getDay());\nconst thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);\n\n// Helper functions\nconst filterByDate = (orders, startDate) => \n  orders.filter(o => new Date(o.created_at) >= startDate);\n\nconst sumAmount = (orders, field = 'amount_myr') => \n  orders.reduce((sum, o) => sum + Number(o[field] || 0), 0);\n\nconst countByStatus = (orders) => {\n  const counts = { pending: 0, approved: 0, completed: 0, rejected: 0, cancelled: 0 };\n  orders.forEach(o => counts[o.status] = (counts[o.status] || 0) + 1);\n  return counts;\n};\n\nconst countByCrypto = (orders) => {\n  const counts = {};\n  orders.forEach(o => counts[o.crypto] = (counts[o.crypto] || 0) + 1);\n  return counts;\n};\n\nconst volumeByCrypto = (orders) => {\n  const volumes = {};\n  orders.forEach(o => {\n    if (!volumes[o.crypto]) volumes[o.crypto] = { myr: 0, crypto: 0, count: 0 };\n    volumes[o.crypto].myr += Number(o.amount_myr || 0);\n    volumes[o.crypto].crypto += Number(o.amount_crypto || 0);\n    volumes[o.crypto].count += 1;\n  });\n  return volumes;\n};\n\n// Today's stats\nconst todayOrders = filterByDate(orders, today);\nconst todayCompleted = todayOrders.filter(o => o.status === 'completed');\n\n// This week's stats\nconst weekOrders = filterByDate(orders, thisWeekStart);\nconst weekCompleted = weekOrders.filter(o => o.status === 'completed');\n\n// This month's stats\nconst monthOrders = filterByDate(orders, thisMonthStart);\nconst monthCompleted = monthOrders.filter(o => o.status === 'completed');\n\n// All time stats\nconst allCompleted = orders.filter(o => o.status === 'completed');\nconst allPending = orders.filter(o => o.status === 'pending');\n\nconst stats = {\n  generatedAt: now.toISOString(),\n  \n  overview: {\n    totalOrders: orders.length,\n    totalCompleted: allCompleted.length,\n    totalPending: allPending.length,\n    totalVolumeMYR: sumAmount(allCompleted),\n    successRate: orders.length > 0 ? \n      ((allCompleted.length / orders.length) * 100).toFixed(1) + '%' : '0%'\n  },\n  \n  today: {\n    orders: todayOrders.length,\n    completed: todayCompleted.length,\n    pending: todayOrders.filter(o => o.status === 'pending').length,\n    volumeMYR: sumAmount(todayCompleted),\n    byStatus: countByStatus(todayOrders)\n  },\n  \n  thisWeek: {\n    orders: weekOrders.length,\n    completed: weekCompleted.length,\n    volumeMYR: sumAmount(weekCompleted),\n    byCrypto: volumeByCrypto(weekCompleted)\n  },\n  \n  thisMonth: {\n    orders: monthOrders.length,\n    completed: monthCompleted.length,\n    volumeMYR: sumAmount(monthCompleted),\n    byCrypto: volumeByCrypto(monthCompleted)\n  },\n  \n  allTime: {\n    byStatus: countByStatus(orders),\n    byCrypto: countByCrypto(orders),\n    volumeByCrypto: volumeByCrypto(allCompleted)\n  },\n  \n  recentPending: allPending\n    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))\n    .slice(0, 5)\n    .map(o => ({\n      id: o.id,\n      crypto: o.crypto,\n      amountMYR: o.amount_myr,\n      customerName: o.customer_name,\n      createdAt: o.created_at\n    }))\n};\n\nreturn [{ json: stats }];"
+      },
+      "id": "15-compute-stats",
+      "name": "15-compute-stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"stats\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Cache-Control", "value": "max-age=60" }
+            ]
+          }
+        }
+      },
+      "id": "20-reply-success",
+      "name": "20-reply-success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": false,\n  \"error_code\": \"UNAUTHORIZED\",\n  \"message\": \"{{ $json.error }}\"\n}",
+        "options": { "responseCode": 401 }
+      },
+      "id": "99-reply-unauthorized",
+      "name": "99-reply-unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 400]
+    }
+  ],
+  "connections": {
+    "01-trigger-webhook": {
+      "main": [[ { "node": "05-auth-check", "type": "main", "index": 0 } ]]
+    },
+    "05-auth-check": {
+      "main": [[ { "node": "06-auth-gate", "type": "main", "index": 0 } ]]
+    },
+    "06-auth-gate": {
+      "main": [
+        [ { "node": "10-fetch-all-orders", "type": "main", "index": 0 } ],
+        [ { "node": "99-reply-unauthorized", "type": "main", "index": 0 } ]
+      ]
+    },
+    "10-fetch-all-orders": {
+      "main": [[ { "node": "15-compute-stats", "type": "main", "index": 0 } ]]
+    },
+    "15-compute-stats": {
+      "main": [[ { "node": "20-reply-success", "type": "main", "index": 0 } ]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "errorWorkflow": "Cryptico-ATM-07-Error-Handler"
+  },
+  "tags": [
+    { "name": "cryptico-atm" },
+    { "name": "admin-stats" }
+  ],
+  "versionId": "1.0.0"
+}

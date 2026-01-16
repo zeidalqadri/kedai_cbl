@@ -1,0 +1,208 @@
+{
+  "name": "Cryptico-ATM-01-Price-Feed",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "01-trigger-cron",
+      "name": "01-trigger-cron",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.coingecko.com/api/v3/simple/price",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ids",
+              "value": "tether,usd-coin,binancecoin,matic-network"
+            },
+            {
+              "name": "vs_currencies",
+              "value": "myr"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "05-fetch-coingecko",
+      "name": "05-fetch-coingecko",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Apply rate markup and structure prices\nconst RATE_MARKUP = Number($env.RATE_MARKUP_PERCENT || 2) / 100;\nconst response = $input.first().json;\nconst now = new Date().toISOString();\n\n// Mapping from CoinGecko ID to our symbol\nconst SYMBOL_MAP = {\n  'tether': 'USDT',\n  'usd-coin': 'USDC',\n  'binancecoin': 'BNB',\n  'matic-network': 'MATIC'\n};\n\nconst prices = [];\n\n// Check if we got valid response\nif (!response || response.statusCode >= 400) {\n  // Return fallback prices with error flag\n  const fallback = [\n    { symbol: 'USDT', price_myr: 4.55, rate_with_markup: 4.55 * (1 + RATE_MARKUP), is_fallback: true },\n    { symbol: 'USDC', price_myr: 4.55, rate_with_markup: 4.55 * (1 + RATE_MARKUP), is_fallback: true },\n    { symbol: 'BNB', price_myr: 2850, rate_with_markup: 2850 * (1 + RATE_MARKUP), is_fallback: true },\n    { symbol: 'MATIC', price_myr: 2.20, rate_with_markup: 2.20 * (1 + RATE_MARKUP), is_fallback: true }\n  ];\n  return fallback.map(p => ({\n    json: {\n      ...p,\n      updated_at: now,\n      fetch_error: true\n    }\n  }));\n}\n\n// Process each coin\nfor (const [coingeckoId, symbol] of Object.entries(SYMBOL_MAP)) {\n  const priceData = response[coingeckoId];\n  const priceMyr = priceData?.myr || 0;\n  \n  prices.push({\n    json: {\n      symbol: symbol,\n      coingecko_id: coingeckoId,\n      price_myr: priceMyr,\n      rate_with_markup: priceMyr * (1 + RATE_MARKUP),\n      markup_percent: RATE_MARKUP * 100,\n      updated_at: now,\n      is_fallback: false,\n      fetch_error: false\n    }\n  });\n}\n\nreturn prices;"
+      },
+      "id": "10-apply-markup",
+      "name": "10-apply-markup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "tableId": "crypto_prices",
+        "conflictFields": "symbol",
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "15-upsert-supabase",
+      "name": "15-upsert-supabase",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [920, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.fetch_error }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "16-check-error",
+      "name": "16-check-error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1140, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.TELEGRAM_ADMIN_CHAT_ID }}\",\n  \"text\": \"⚠️ <b>PRICE FEED WARNING</b>\\n\\nCoinGecko API returned error.\\nUsing fallback prices.\\n\\n🕐 Time: {{ $now.toISOString() }}\",\n  \"parse_mode\": \"HTML\"\n}",
+        "options": {}
+      },
+      "id": "20-notify-error",
+      "name": "20-notify-error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 200]
+    },
+    {
+      "parameters": {},
+      "id": "99-end-success",
+      "name": "99-end-success",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1360, 400]
+    }
+  ],
+  "connections": {
+    "01-trigger-cron": {
+      "main": [
+        [
+          {
+            "node": "05-fetch-coingecko",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05-fetch-coingecko": {
+      "main": [
+        [
+          {
+            "node": "10-apply-markup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10-apply-markup": {
+      "main": [
+        [
+          {
+            "node": "15-upsert-supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15-upsert-supabase": {
+      "main": [
+        [
+          {
+            "node": "16-check-error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16-check-error": {
+      "main": [
+        [
+          {
+            "node": "20-notify-error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "99-end-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "Cryptico-ATM-07-Error-Handler"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "cryptico-atm"
+    },
+    {
+      "name": "price-feed"
+    }
+  ],
+  "pinData": {},
+  "versionId": "1.0.0"
+}
