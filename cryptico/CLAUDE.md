@@ -47,10 +47,12 @@ src/
 ├── hooks/
 │   └── useKiosk.ts              # Main kiosk state/logic hook
 ├── lib/
+│   ├── api.ts                   # n8n webhook API client
 │   ├── constants.ts             # CRYPTO_ASSETS, NETWORKS, STORAGE_KEYS
 │   ├── prices.ts                # CoinGecko price fetching
-│   ├── storage.ts               # LocalStorage abstraction (swap for API)
-│   ├── telegram.ts              # Telegram Bot API integration
+│   ├── storage.ts               # LocalStorage abstraction (legacy)
+│   ├── telegram.ts              # Telegram Bot API integration (legacy)
+│   ├── ui-primitives.ts         # Centralized UI design tokens
 │   └── utils.ts                 # Formatting, validation, helpers
 ├── types/
 │   └── index.ts                 # TypeScript interfaces
@@ -87,9 +89,11 @@ Copy `.env.example` to `.env` and configure:
 3. Customer enters contact details + wallet address (validated per network)
 4. DuitNow QR payment displayed
 5. Customer provides payment proof (reference or screenshot)
-6. Order saved, Telegram notification sent
-7. Admin verifies payment, approves/rejects
-8. Admin marks complete with TX hash
+6. Order saved to PostgreSQL via n8n API
+7. Telegram notification sent with inline Approve ✅ / Reject ❌ buttons
+8. Admin clicks button → order status updated automatically
+9. Customer sees status update on ProcessingScreen (polls API every 5s)
+10. Admin marks complete with TX hash (via dashboard or future Telegram command)
 
 ## Admin Access
 
@@ -227,12 +231,13 @@ The backend is powered by n8n workflows on `alumist-n8n` VPS (`ssh root@45.159.2
 | Workflow | ID | Endpoint | Status |
 |----------|-----|----------|--------|
 | wf-01-price-feed | IVUYUXry0mrZa4IX | Schedule (5 min) | ✅ Active |
-| wf-02-order-submit | 6Hqe4GtzyFjt3Ohx | `POST /webhook/order/submit` | ✅ Tested |
+| wf-02-order-submit | 6Hqe4GtzyFjt3Ohx | `POST /webhook/order/submit` | ✅ Active |
 | wf-03-status-update | KlFiRgwBWe4El78q | `POST /webhook/order/status` | ✅ Tested |
 | wf-04-order-lookup | JiG4zLRi1kBYKpYP | `GET /webhook/order/lookup?id=ORDERID` | ✅ Tested |
 | wf-05-admin-orders | uNwjBIjVYGXh46nL | `GET /webhook/admin/orders` | ✅ Tested |
 | wf-06-admin-stats | GniwbrtaChMXcSaE | `GET /webhook/admin/stats` | ✅ Tested |
 | wf-07-error-handler | owoBS0uJhf8JPcaP | Error workflow | ⏸️ Inactive |
+| wf-08-telegram-callback | TgCallbackHandler01 | `POST /webhook/cryptico/telegram-callback` | ✅ Active |
 
 ### API Authentication
 
@@ -258,10 +263,38 @@ The backend is powered by n8n workflows on `alumist-n8n` VPS (`ssh root@45.159.2
 
 **N8N Access:** `https://alumist.alumga.com/projects/CcNtl9Ch6q6lBF14/folders/RxsaUrL1CV9ey1qX/workflows`
 
+### Telegram Bot Configuration
+
+The Telegram bot is configured to send inline Approve/Reject buttons for order verification.
+
+| Setting | Value |
+|---------|-------|
+| Bot Token | `TELEGRAM_BOT_TOKEN_REDACTED` |
+| Webhook URL | `https://alumist.alumga.com/webhook/cryptico/telegram-callback` |
+
+**Webhook Setup Command:**
+```bash
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -d "url=https://alumist.alumga.com/webhook/cryptico/telegram-callback"
+```
+
+**Verify Webhook:**
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+```
+
+### Telegram Inline Buttons Flow
+
+1. Customer submits order → wf-02 sends notification with inline Approve ✅ / Reject ❌ buttons
+2. Admin clicks button → Telegram sends callback to wf-08
+3. wf-08 validates callback, updates order status, edits original message
+4. Customer's ProcessingScreen polls API and sees status update
+
 ### Known Limitations
 
 - **Path parameters not supported**: n8n deployment doesn't match `:param` style paths. Use query params instead.
 - **wf-04 uses `?id=` not `/lookup/:orderId`**: Changed due to webhook routing limitation.
+- **Telegram webhook conflicts**: Use unique paths like `/cryptico/telegram-callback` to avoid conflicts with other bots.
 
 ---
 
@@ -277,3 +310,8 @@ The backend is powered by n8n workflows on `alumist-n8n` VPS (`ssh root@45.159.2
 | 2026-01-16 | **All Workflows Tested**: wf-02 through wf-06 deployed and verified working |
 | 2026-01-16 | **wf-04 Fix**: Changed from path params to query params due to n8n limitation |
 | 2026-01-16 | **DB Schema Fix**: Updated orders table CHECK constraints for new coins |
+| 2026-01-16 | **Telegram Inline Buttons**: wf-02 sends Approve/Reject buttons, wf-08 handles callbacks |
+| 2026-01-16 | **Payment Proof Images**: Customers can upload payment screenshots, sent to Telegram |
+| 2026-01-16 | **Glassmorphic UI**: Added ui-primitives.ts with centralized design tokens |
+| 2026-01-16 | **API Polling Fix**: ProcessingScreen now polls API instead of localStorage |
+| 2026-01-16 | **Cloudflare Proxy Fix**: Fixed request body streaming in Pages function |
