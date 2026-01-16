@@ -3,11 +3,17 @@ import type { NetworkType } from '../types'
 // Environment-based configuration
 // All sensitive values come from environment variables
 
+// Use /api proxy in both dev (Vite) and production (Cloudflare Pages Function)
+const getApiUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
+  return '/api'
+}
+
 export const config = {
   // API Configuration (n8n webhooks)
-  apiUrl: import.meta.env.VITE_API_URL || 'https://alumist.alumga.com/webhook',
-  apiKey: import.meta.env.VITE_API_KEY || '',
-  adminApiKey: import.meta.env.VITE_ADMIN_API_KEY || '',
+  apiUrl: getApiUrl(),
+  apiKey: import.meta.env.VITE_API_KEY || '77768a4aa5da6d70a1cd5e5adc7e28ef59858a320b1a0b5133fc5f1ad5c5165d',
+  adminApiKey: import.meta.env.VITE_ADMIN_API_KEY || '7749a10b62c81a4c9b8f429b80fc9b797997506345a26ca802857b7049c5165d',
 
   // Telegram Bot Setup (for client-side notifications - legacy)
   telegramBotToken: import.meta.env.VITE_TELEGRAM_BOT_TOKEN || '',
