@@ -7,7 +7,7 @@ import { config } from '../config'
 const API_BASE = config.apiUrl
 
 // Response types from n8n webhooks
-interface N8nApiResponse<T> {
+interface N8nApiResponse {
   ok: boolean
   error_code?: string
   message?: string
@@ -42,7 +42,7 @@ async function publicFetch<T>(
       headers,
     })
 
-    const data = await response.json() as N8nApiResponse<T>
+    const data = await response.json() as N8nApiResponse
 
     if (!data.ok) {
       return {
@@ -80,7 +80,7 @@ async function adminFetch<T>(
       headers,
     })
 
-    const data = await response.json() as N8nApiResponse<T>
+    const data = await response.json() as N8nApiResponse
 
     if (!data.ok) {
       return {
@@ -175,7 +175,7 @@ export const orderApi = {
     // No auth needed for lookup
     try {
       const response = await fetch(`${API_BASE}/order/lookup?id=${encodeURIComponent(orderId)}`)
-      const data = await response.json() as N8nApiResponse<OrderLookupResponse>
+      const data = await response.json() as N8nApiResponse
 
       if (!data.ok) {
         return {

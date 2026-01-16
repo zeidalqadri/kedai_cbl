@@ -10,9 +10,8 @@ import type {
 import { config } from '../config'
 import { CRYPTO_ASSETS } from '../lib/constants'
 import { fetchPrices, PRICE_REFRESH_INTERVAL, calculateCryptoAmount } from '../lib/prices'
-import { orderStorage } from '../lib/storage'
-import { notifyNewOrder } from '../lib/telegram'
-import { generateOrderId, validateWalletAddress } from '../lib/utils'
+import { orderApi } from '../lib/api'
+import { validateWalletAddress } from '../lib/utils'
 
 interface UseKioskReturn {
   // Screen state
@@ -226,8 +225,6 @@ export function useKiosk(): UseKioskReturn {
     }
 
     setError('')
-    const newOrderId = generateOrderId()
-    setOrderId(newOrderId)
     setScreen('payment')
   }, [userDetails, selectedNetwork])
 
@@ -236,39 +233,62 @@ export function useKiosk(): UseKioskReturn {
       setError('Please provide payment reference or upload screenshot')
       return
     }
-    if (!selectedCrypto || !selectedNetwork) return
+    if (!selectedCrypto || !selectedNetwork || !rateLockTime) return
 
     setError('')
 
-    const order: Order = {
-      id: orderId,
+    // Calculate base rate (before markup)
+    const currentRate = prices[selectedCrypto]!
+    const baseRate = currentRate / (1 + config.rateMarkup / 100)
+
+    // Submit order via API
+    const result = await orderApi.create({
       crypto: selectedCrypto,
       network: selectedNetwork,
       amountMYR: parseFloat(amount),
-      amountCrypto: cryptoAmount,
-      networkFee: networkFee,
-      rate: prices[selectedCrypto]!,
+      customerName: userDetails.name,
+      contactType: userDetails.contactType,
+      contact: userDetails.contact,
+      walletAddress: userDetails.walletAddress,
+      rateLockTimestamp: rateLockTime,
+      currentRate: currentRate,
+      baseRate: baseRate,
+      paymentRef: paymentRef || undefined,
+      proofImageBase64: paymentProof || undefined,
+    })
+
+    if (!result.success || !result.data) {
+      setError(result.error || 'Failed to submit order')
+      return
+    }
+
+    // Create local order object for UI
+    const order: Order = {
+      id: result.data.orderId,
+      crypto: selectedCrypto,
+      network: selectedNetwork,
+      amountMYR: result.data.amountMYR,
+      amountCrypto: result.data.amountCrypto,
+      networkFee: result.data.networkFee,
+      rate: result.data.rate,
       customer: { ...userDetails },
       paymentRef: paymentRef,
       hasProofImage: !!paymentProof,
-      status: 'pending',
+      status: result.data.status,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     }
 
+    setOrderId(result.data.orderId)
     setCurrentOrder(order)
-    await orderStorage.add(order)
-    await notifyNewOrder(order, paymentProof || undefined)
     setScreen('processing')
   }, [
     paymentRef,
     paymentProof,
     selectedCrypto,
     selectedNetwork,
-    orderId,
+    rateLockTime,
     amount,
-    cryptoAmount,
-    networkFee,
     prices,
     userDetails,
   ])
@@ -280,14 +300,41 @@ export function useKiosk(): UseKioskReturn {
     }
     setError('')
     setLookupLoading(true)
+    setLookupResult(null)
 
-    const order = await orderStorage.getById(lookupOrderId.trim().toUpperCase())
-    setLookupResult(order)
+    const result = await orderApi.lookup(lookupOrderId.trim().toUpperCase())
     setLookupLoading(false)
 
-    if (!order) {
-      setError('Order not found')
+    if (!result.success || !result.data) {
+      setError(result.error || 'Order not found')
+      return
     }
+
+    // Convert API response to Order format
+    const apiOrder = result.data.order
+    const order: Order = {
+      id: apiOrder.id,
+      crypto: apiOrder.crypto,
+      network: apiOrder.network,
+      amountMYR: apiOrder.amountMYR,
+      amountCrypto: apiOrder.amountCrypto,
+      networkFee: apiOrder.networkFee,
+      rate: apiOrder.rate,
+      customer: {
+        name: apiOrder.customerName,
+        contactType: 'telegram', // Not returned from lookup
+        contact: '', // Not returned from lookup
+        walletAddress: apiOrder.walletAddress,
+      },
+      paymentRef: '',
+      hasProofImage: false,
+      status: apiOrder.status,
+      txHash: apiOrder.txHash,
+      createdAt: new Date(apiOrder.createdAt).getTime(),
+      updatedAt: new Date(apiOrder.updatedAt).getTime(),
+    }
+
+    setLookupResult(order)
   }, [lookupOrderId])
 
   return {
