@@ -1,12 +1,12 @@
 {
-  "id": "wZJq4ncBPhTQbTsR",
+  "id": "JiG4zLRi1kBYKpYP",
   "name": "Cryptico-ATM-04-Order-Lookup",
   "active": true,
   "nodes": [
     {
       "parameters": {
         "httpMethod": "GET",
-        "path": "order/lookup/:orderId",
+        "path": "order/lookup",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -20,7 +20,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const request = $input.first().json;\nlet orderId = request.params?.orderId || '';\norderId = orderId.toString().trim().toUpperCase();\nconst isValid = /^CK[A-Z0-9]{5,15}$/.test(orderId);\n\nreturn [{ json: { orderId: orderId, isValid: isValid, error: isValid ? null : 'Invalid order ID format.' } }];"
+        "jsCode": "const request = $input.first().json;\nlet orderId = request.query?.id || request.params?.orderId || '';\norderId = orderId.toString().trim().toUpperCase();\nconst isValid = /^CK[A-Z0-9]{5,15}$/.test(orderId);\n\nreturn [{ json: { orderId: orderId, isValid: isValid, error: isValid ? null : 'Invalid order ID format. Use ?id=ORDERID' } }];"
       },
       "id": "05-validate-id",
       "name": "05-validate-id",

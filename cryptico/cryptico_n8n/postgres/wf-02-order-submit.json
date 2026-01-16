@@ -1,5 +1,5 @@
 {
-  "id": "woHyn3gbFETmMbmu",
+  "id": "6Hqe4GtzyFjt3Ohx",
   "name": "Cryptico-ATM-02-Order-Submit",
   "active": true,
   "nodes": [
@@ -98,7 +98,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const input = $input.first().json;\n\nconst NETWORK_FEES = {\n  'TRC-20': Number($env.CRYPTICO_FEE_TRC20) || 1.00,\n  'ERC-20': Number($env.CRYPTICO_FEE_ERC20) || 15.00,\n  'BTC': Number($env.CRYPTICO_FEE_BTC) || 10.00,\n  'ETH': Number($env.CRYPTICO_FEE_ETH) || 15.00,\n  'SOL': Number($env.CRYPTICO_FEE_SOL) || 0.50,\n  'ICP': Number($env.CRYPTICO_FEE_ICP) || 1.00\n};\n\nconst networkFee = NETWORK_FEES[input.network] || 0;\nconst amountAfterFee = input.amountMYR - networkFee;\nconst cryptoAmount = amountAfterFee / input.currentRate;\n\nconst orderId = 'CK' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  order: {\n    id: orderId,\n    crypto: input.crypto,\n    network: input.network,\n    amount_myr: input.amountMYR,\n    amount_crypto: cryptoAmount,\n    network_fee: networkFee,\n    rate: input.currentRate,\n    base_rate: input.baseRate,\n    customer_name: input.customerName,\n    customer_contact_type: input.contactType,\n    customer_contact: input.contact,\n    wallet_address: input.walletAddress,\n    payment_ref: input.paymentRef || null,\n    has_proof_image: !!input.proofImageBase64,\n    status: 'pending',\n    created_at: now,\n    updated_at: now,\n    kiosk_id: input.kioskId || 'default'\n  },\n  input: input\n} }];"
+        "jsCode": "const input = $input.first().json;\n\nconst NETWORK_FEES = {\n  'TRC-20': Number($env.CRYPTICO_FEE_TRC20) || 1.00,\n  'ERC-20': Number($env.CRYPTICO_FEE_ERC20) || 15.00,\n  'BTC': Number($env.CRYPTICO_FEE_BTC) || 10.00,\n  'ETH': Number($env.CRYPTICO_FEE_ETH) || 15.00,\n  'SOL': Number($env.CRYPTICO_FEE_SOL) || 0.50,\n  'ICP': Number($env.CRYPTICO_FEE_ICP) || 1.00\n};\n\nconst networkFee = NETWORK_FEES[input.network] || 0;\nconst amountAfterFee = input.amountMYR - networkFee;\nconst cryptoAmount = amountAfterFee / input.currentRate;\n\nconst orderId = 'CK' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();\nconst idempotencyKey = input.idempotencyKey || (orderId + '-' + Date.now());\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  order: {\n    id: orderId,\n    idempotency_key: idempotencyKey,\n    crypto: input.crypto,\n    network: input.network,\n    amount_myr: input.amountMYR,\n    amount_crypto: cryptoAmount,\n    network_fee: networkFee,\n    rate: input.currentRate,\n    base_rate: input.baseRate,\n    customer_name: input.customerName,\n    customer_contact_type: input.contactType,\n    customer_contact: input.contact,\n    wallet_address: input.walletAddress,\n    payment_ref: input.paymentRef || null,\n    has_proof_image: !!input.proofImageBase64,\n    status: 'pending',\n    created_at: now,\n    updated_at: now,\n    kiosk_id: input.kioskId || 'default'\n  },\n  input: input\n} }];"
       },
       "id": "20-generate-order",
       "name": "20-generate-order",
@@ -109,7 +109,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=INSERT INTO orders (id, crypto, network, amount_myr, amount_crypto, network_fee, rate, base_rate, customer_name, customer_contact_type, customer_contact, wallet_address, payment_ref, has_proof_image, status, kiosk_id, created_at, updated_at) VALUES ('{{ $json.order.id }}', '{{ $json.order.crypto }}', '{{ $json.order.network }}', {{ $json.order.amount_myr }}, {{ $json.order.amount_crypto }}, {{ $json.order.network_fee }}, {{ $json.order.rate }}, {{ $json.order.base_rate }}, '{{ $json.order.customer_name }}', '{{ $json.order.customer_contact_type }}', '{{ $json.order.customer_contact }}', '{{ $json.order.wallet_address }}', {{ $json.order.payment_ref ? \"'\" + $json.order.payment_ref + \"'\" : 'NULL' }}, {{ $json.order.has_proof_image }}, '{{ $json.order.status }}', '{{ $json.order.kiosk_id }}', '{{ $json.order.created_at }}', '{{ $json.order.updated_at }}') RETURNING *",
+        "query": "=INSERT INTO orders (id, idempotency_key, crypto, network, amount_myr, amount_crypto, network_fee, rate, base_rate, customer_name, customer_contact_type, customer_contact, wallet_address, payment_ref, has_proof_image, status, kiosk_id, created_at, updated_at) VALUES ('{{ $json.order.id }}', '{{ $json.order.idempotency_key }}', '{{ $json.order.crypto }}', '{{ $json.order.network }}', {{ $json.order.amount_myr }}, {{ $json.order.amount_crypto }}, {{ $json.order.network_fee }}, {{ $json.order.rate }}, {{ $json.order.base_rate }}, '{{ $json.order.customer_name }}', '{{ $json.order.customer_contact_type }}', '{{ $json.order.customer_contact }}', '{{ $json.order.wallet_address }}', {{ $json.order.payment_ref ? \"'\" + $json.order.payment_ref + \"'\" : 'NULL' }}, {{ $json.order.has_proof_image }}, '{{ $json.order.status }}', '{{ $json.order.kiosk_id }}', '{{ $json.order.created_at }}', '{{ $json.order.updated_at }}') RETURNING *",
         "options": {}
       },
       "id": "25-insert-order",
@@ -148,7 +148,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const order = $json.order;\n\nreturn [{ json: {\n  ok: true,\n  orderId: order.id,\n  status: 'pending',\n  crypto: order.crypto,\n  network: order.network,\n  amountMYR: order.amount_myr,\n  amountCrypto: order.amount_crypto,\n  rate: order.rate,\n  networkFee: order.network_fee,\n  estimatedDelivery: '15-30 minutes after approval',\n  message: `Order ${order.id} submitted successfully. You will be notified when your order is processed.`,\n  trackingUrl: `/order/lookup/${order.id}`\n} }];"
+        "jsCode": "const order = $('30-format-telegram').first().json.order;\n\nreturn [{ json: {\n  ok: true,\n  orderId: order.id,\n  status: 'pending',\n  crypto: order.crypto,\n  network: order.network,\n  amountMYR: order.amount_myr,\n  amountCrypto: order.amount_crypto,\n  rate: order.rate,\n  networkFee: order.network_fee,\n  estimatedDelivery: '15-30 minutes after approval',\n  message: `Order ${order.id} submitted successfully. You will be notified when your order is processed.`,\n  trackingUrl: `/order/lookup/${order.id}`\n} }];"
       },
       "id": "55-format-response",
       "name": "55-format-response",
