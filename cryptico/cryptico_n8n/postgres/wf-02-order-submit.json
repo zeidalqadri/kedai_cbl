@@ -1,5 +1,7 @@
 {
+  "id": "woHyn3gbFETmMbmu",
   "name": "Cryptico-ATM-02-Order-Submit",
+  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -15,12 +17,12 @@
       "typeVersion": 2,
       "position": [260, 300],
       "webhookId": "cryptico-order-submit",
-      "credentials": { "httpHeaderAuth": { "id": "HEADER_AUTH_CREDENTIAL_ID", "name": "Cryptico API Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "B9IPRA0h6bahkCwZ", "name": "Cryptico API Key" } }
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const input = $input.first().json.body || $input.first().json;\nconst errors = [];\n\nconst requiredFields = [\n  { field: 'crypto', type: 'string', values: ['USDT', 'USDC', 'BNB', 'MATIC'] },\n  { field: 'network', type: 'string', values: ['TRC-20', 'BEP-20', 'ERC-20', 'POLYGON'] },\n  { field: 'amountMYR', type: 'number', min: 50, max: 10000 },\n  { field: 'customerName', type: 'string', minLength: 2 },\n  { field: 'contactType', type: 'string', values: ['telegram', 'email'] },\n  { field: 'contact', type: 'string', minLength: 3 },\n  { field: 'walletAddress', type: 'string', minLength: 20 },\n  { field: 'rateLockTimestamp', type: 'number' }\n];\n\nfor (const req of requiredFields) {\n  const value = input[req.field];\n  if (value === undefined || value === null || value === '') {\n    errors.push(`Missing required field: ${req.field}`);\n    continue;\n  }\n  if (req.type === 'string' && typeof value !== 'string') errors.push(`${req.field} must be a string`);\n  else if (req.type === 'number' && typeof value !== 'number') errors.push(`${req.field} must be a number`);\n  if (req.values && !req.values.includes(value)) errors.push(`${req.field} must be one of: ${req.values.join(', ')}`);\n  if (req.min && value < req.min) errors.push(`${req.field} must be at least ${req.min}`);\n  if (req.max && value > req.max) errors.push(`${req.field} must be at most ${req.max}`);\n  if (req.minLength && typeof value === 'string' && value.length < req.minLength) errors.push(`${req.field} must be at least ${req.minLength} characters`);\n}\n\nconst walletValidation = {\n  'TRC-20': { prefix: 'T', length: 34 },\n  'BEP-20': { prefix: '0x', length: 42, regex: /^0x[a-fA-F0-9]{40}$/ },\n  'ERC-20': { prefix: '0x', length: 42, regex: /^0x[a-fA-F0-9]{40}$/ },\n  'POLYGON': { prefix: '0x', length: 42, regex: /^0x[a-fA-F0-9]{40}$/ }\n};\n\nif (input.network && input.walletAddress) {\n  const validation = walletValidation[input.network];\n  if (validation) {\n    if (!input.walletAddress.startsWith(validation.prefix)) errors.push(`Wallet address for ${input.network} must start with ${validation.prefix}`);\n    if (input.walletAddress.length !== validation.length) errors.push(`Wallet address for ${input.network} must be ${validation.length} characters`);\n  }\n}\n\nreturn [{ json: { ...input, isValid: errors.length === 0, validationErrors: errors, receivedAt: new Date().toISOString() } }];"
+        "jsCode": "const input = $input.first().json.body || $input.first().json;\nconst errors = [];\n\nconst requiredFields = [\n  { field: 'crypto', type: 'string', values: ['USDT', 'USDC', 'BTC', 'ETH', 'SOL', 'ICP'] },\n  { field: 'network', type: 'string', values: ['TRC-20', 'ERC-20', 'BTC', 'ETH', 'SOL', 'ICP'] },\n  { field: 'amountMYR', type: 'number', min: 50, max: 10000 },\n  { field: 'customerName', type: 'string', minLength: 2 },\n  { field: 'contactType', type: 'string', values: ['telegram', 'email'] },\n  { field: 'contact', type: 'string', minLength: 3 },\n  { field: 'walletAddress', type: 'string', minLength: 20 },\n  { field: 'rateLockTimestamp', type: 'number' }\n];\n\nfor (const req of requiredFields) {\n  const value = input[req.field];\n  if (value === undefined || value === null || value === '') {\n    errors.push(`Missing required field: ${req.field}`);\n    continue;\n  }\n  if (req.type === 'string' && typeof value !== 'string') errors.push(`${req.field} must be a string`);\n  else if (req.type === 'number' && typeof value !== 'number') errors.push(`${req.field} must be a number`);\n  if (req.values && !req.values.includes(value)) errors.push(`${req.field} must be one of: ${req.values.join(', ')}`);\n  if (req.min && value < req.min) errors.push(`${req.field} must be at least ${req.min}`);\n  if (req.max && value > req.max) errors.push(`${req.field} must be at most ${req.max}`);\n  if (req.minLength && typeof value === 'string' && value.length < req.minLength) errors.push(`${req.field} must be at least ${req.minLength} characters`);\n}\n\nconst walletValidation = {\n  'TRC-20': { prefix: 'T', length: 34 },\n  'ERC-20': { prefix: '0x', length: 42 },\n  'BTC': { prefixes: ['1', '3', 'bc1'], minLength: 26, maxLength: 62 },\n  'ETH': { prefix: '0x', length: 42 },\n  'SOL': { minLength: 32, maxLength: 44 },\n  'ICP': { minLength: 27, maxLength: 63 }\n};\n\nif (input.network && input.walletAddress) {\n  const validation = walletValidation[input.network];\n  if (validation) {\n    if (validation.prefix && !input.walletAddress.startsWith(validation.prefix)) errors.push(`Wallet address for ${input.network} must start with ${validation.prefix}`);\n    if (validation.prefixes && !validation.prefixes.some(p => input.walletAddress.startsWith(p))) errors.push(`Wallet address for ${input.network} must start with ${validation.prefixes.join(' or ')}`);\n    if (validation.length && input.walletAddress.length !== validation.length) errors.push(`Wallet address for ${input.network} must be ${validation.length} characters`);\n    if (validation.minLength && input.walletAddress.length < validation.minLength) errors.push(`Wallet address for ${input.network} must be at least ${validation.minLength} characters`);\n    if (validation.maxLength && input.walletAddress.length > validation.maxLength) errors.push(`Wallet address for ${input.network} must be at most ${validation.maxLength} characters`);\n  }\n}\n\nreturn [{ json: { ...input, isValid: errors.length === 0, validationErrors: errors, receivedAt: new Date().toISOString() } }];"
       },
       "id": "05-validate-input",
       "name": "05-validate-input",
@@ -29,7 +31,14 @@
       "position": [480, 300]
     },
     {
-      "parameters": { "conditions": { "boolean": [{ "value1": "={{ $json.isValid }}", "value2": true }] } },
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "valid-check", "leftValue": "={{ $json.isValid }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
       "id": "06-validation-gate",
       "name": "06-validation-gate",
       "type": "n8n-nodes-base.if",
@@ -48,7 +57,14 @@
       "position": [920, 200]
     },
     {
-      "parameters": { "conditions": { "boolean": [{ "value1": "={{ $json.rateLockValid }}", "value2": true }] } },
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "ratelock-check", "leftValue": "={{ $json.rateLockValid }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
       "id": "11-ratelock-gate",
       "name": "11-ratelock-gate",
       "type": "n8n-nodes-base.if",
@@ -66,7 +82,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [1360, 100],
-      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Cryptico PostgreSQL" } }
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
     },
     {
       "parameters": {
@@ -82,7 +98,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const input = $input.first().json;\n\nconst NETWORK_FEES = {\n  'TRC-20': Number($env.CRYPTICO_FEE_TRC20) || 1.00,\n  'BEP-20': Number($env.CRYPTICO_FEE_BEP20) || 2.50,\n  'ERC-20': Number($env.CRYPTICO_FEE_ERC20) || 15.00,\n  'POLYGON': Number($env.CRYPTICO_FEE_POLYGON) || 0.50\n};\n\nconst networkFee = NETWORK_FEES[input.network] || 0;\nconst amountAfterFee = input.amountMYR - networkFee;\nconst cryptoAmount = amountAfterFee / input.currentRate;\n\nconst orderId = 'CK' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  order: {\n    id: orderId,\n    crypto: input.crypto,\n    network: input.network,\n    amount_myr: input.amountMYR,\n    amount_crypto: cryptoAmount,\n    network_fee: networkFee,\n    rate: input.currentRate,\n    base_rate: input.baseRate,\n    customer_name: input.customerName,\n    customer_contact_type: input.contactType,\n    customer_contact: input.contact,\n    wallet_address: input.walletAddress,\n    payment_ref: input.paymentRef || null,\n    has_proof_image: !!input.proofImageBase64,\n    status: 'pending',\n    created_at: now,\n    updated_at: now,\n    kiosk_id: input.kioskId || 'default'\n  },\n  input: input\n} }];"
+        "jsCode": "const input = $input.first().json;\n\nconst NETWORK_FEES = {\n  'TRC-20': Number($env.CRYPTICO_FEE_TRC20) || 1.00,\n  'ERC-20': Number($env.CRYPTICO_FEE_ERC20) || 15.00,\n  'BTC': Number($env.CRYPTICO_FEE_BTC) || 10.00,\n  'ETH': Number($env.CRYPTICO_FEE_ETH) || 15.00,\n  'SOL': Number($env.CRYPTICO_FEE_SOL) || 0.50,\n  'ICP': Number($env.CRYPTICO_FEE_ICP) || 1.00\n};\n\nconst networkFee = NETWORK_FEES[input.network] || 0;\nconst amountAfterFee = input.amountMYR - networkFee;\nconst cryptoAmount = amountAfterFee / input.currentRate;\n\nconst orderId = 'CK' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  order: {\n    id: orderId,\n    crypto: input.crypto,\n    network: input.network,\n    amount_myr: input.amountMYR,\n    amount_crypto: cryptoAmount,\n    network_fee: networkFee,\n    rate: input.currentRate,\n    base_rate: input.baseRate,\n    customer_name: input.customerName,\n    customer_contact_type: input.contactType,\n    customer_contact: input.contact,\n    wallet_address: input.walletAddress,\n    payment_ref: input.paymentRef || null,\n    has_proof_image: !!input.proofImageBase64,\n    status: 'pending',\n    created_at: now,\n    updated_at: now,\n    kiosk_id: input.kioskId || 'default'\n  },\n  input: input\n} }];"
       },
       "id": "20-generate-order",
       "name": "20-generate-order",
@@ -101,12 +117,12 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [2020, 100],
-      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Cryptico PostgreSQL" } }
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const order = $('20-generate-order').first().json.order;\n\nconst CRYPTO_ICONS = { 'USDT': '💵', 'USDC': '🔵', 'BNB': '🟡', 'MATIC': '🟣' };\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\nconst formatCrypto = (amount) => Number(amount).toFixed(4);\n\nconst message = `🔔 <b>NEW CRYPTO ORDER</b>\\n\\n📋 <b>Order ID:</b> <code>${order.id}</code>\\n💰 <b>Amount Paid:</b> ${formatMYR(order.amount_myr)}\\n🪙 <b>Crypto:</b> ${CRYPTO_ICONS[order.crypto] || '🪙'} ${formatCrypto(order.amount_crypto)} ${order.crypto}\\n📍 <b>Network:</b> ${order.network}\\n💸 <b>Network Fee:</b> ${formatMYR(order.network_fee)}\\n📊 <b>Rate:</b> 1 ${order.crypto} = ${formatMYR(order.rate)}\\n\\n👤 <b>Customer:</b>\\n├ Name: ${order.customer_name}\\n├ ${order.customer_contact_type === 'telegram' ? 'Telegram' : 'Email'}: ${order.customer_contact}\\n└ Wallet: <code>${order.wallet_address}</code>\\n\\n💳 <b>Payment Ref:</b> ${order.payment_ref || 'Screenshot attached'}\\n📅 <b>Time:</b> ${new Date(order.created_at).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}\\n🏧 <b>Kiosk:</b> ${order.kiosk_id}\\n\\n⏳ <b>Status:</b> Awaiting verification`;\n\nreturn [{ json: { order: order, telegramMessage: message } }];"
+        "jsCode": "const order = $('20-generate-order').first().json.order;\n\nconst CRYPTO_ICONS = { 'USDT': '💵', 'USDC': '🔵', 'BTC': '🟠', 'ETH': '💎', 'SOL': '🟣', 'ICP': '🔷' };\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\nconst formatCrypto = (amount) => Number(amount).toFixed(4);\n\nconst message = `🔔 <b>NEW CRYPTO ORDER</b>\\n\\n📋 <b>Order ID:</b> <code>${order.id}</code>\\n💰 <b>Amount Paid:</b> ${formatMYR(order.amount_myr)}\\n🪙 <b>Crypto:</b> ${CRYPTO_ICONS[order.crypto] || '🪙'} ${formatCrypto(order.amount_crypto)} ${order.crypto}\\n📍 <b>Network:</b> ${order.network}\\n💸 <b>Network Fee:</b> ${formatMYR(order.network_fee)}\\n📊 <b>Rate:</b> 1 ${order.crypto} = ${formatMYR(order.rate)}\\n\\n👤 <b>Customer:</b>\\n├ Name: ${order.customer_name}\\n├ ${order.customer_contact_type === 'telegram' ? 'Telegram' : 'Email'}: ${order.customer_contact}\\n└ Wallet: <code>${order.wallet_address}</code>\\n\\n💳 <b>Payment Ref:</b> ${order.payment_ref || 'Screenshot attached'}\\n📅 <b>Time:</b> ${new Date(order.created_at).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}\\n🏧 <b>Kiosk:</b> ${order.kiosk_id}\\n\\n⏳ <b>Status:</b> Awaiting verification`;\n\nreturn [{ json: { order: order, telegramMessage: message } }];"
       },
       "id": "30-format-telegram",
       "name": "30-format-telegram",

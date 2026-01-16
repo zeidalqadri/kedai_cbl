@@ -1,5 +1,7 @@
 {
+  "id": "hZt9ZRIXc6RC67yR",
   "name": "Cryptico-ATM-06-Admin-Stats",
+  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -15,7 +17,7 @@
       "typeVersion": 2,
       "position": [260, 300],
       "webhookId": "cryptico-admin-stats",
-      "credentials": { "httpHeaderAuth": { "id": "ADMIN_HEADER_AUTH_CREDENTIAL_ID", "name": "Cryptico Admin Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "L7j6V9fwqAW2mVNn", "name": "Cryptico Admin Key" } }
     },
     {
       "parameters": {
@@ -28,7 +30,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [480, 300],
-      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Cryptico PostgreSQL" } }
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
     },
     {
       "parameters": {
