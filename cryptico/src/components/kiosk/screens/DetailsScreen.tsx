@@ -1,5 +1,6 @@
 import { CRYPTO_ASSETS, NETWORKS } from '../../../lib/constants'
 import { formatMYR, formatCrypto, validateWalletAddress } from '../../../lib/utils'
+import { ui, cx, text, ratePill, validationStyles } from '../../../lib/ui-primitives'
 import { BackIcon } from '../../icons'
 import type { useKiosk } from '../../../hooks/useKiosk'
 
@@ -32,13 +33,15 @@ export function DetailsScreen({ kiosk }: DetailsScreenProps) {
       <div className="flex items-center justify-between mb-6">
         <button
           onClick={() => setScreen('amount')}
-          className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          className={cx(ui.btnBase, ui.btnQuiet, "px-0 py-0 hover:text-white")}
         >
-          <BackIcon /> Back
+          <span className={cx("flex items-center gap-2", text.secondary, "hover:text-white transition-colors")}>
+            <BackIcon /> Back
+          </span>
         </button>
         {rateLockRemaining > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-500/20 text-yellow-400 text-sm">
-            <span>⏱</span>
+          <div className={cx(ratePill.base, ratePill.active)}>
+            <span aria-hidden>⏱</span>
             <span>
               Rate locked: {Math.floor(rateLockRemaining / 60)}:
               {(rateLockRemaining % 60).toString().padStart(2, '0')}
@@ -48,35 +51,37 @@ export function DetailsScreen({ kiosk }: DetailsScreenProps) {
       </div>
 
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-white">Your Details</h2>
-        <p className="text-gray-400 text-sm mt-1">We'll contact you for verification</p>
+        <h2 className="text-2xl font-bold text-white tracking-tight">Your Details</h2>
+        <p className={cx("text-sm mt-1", text.secondary)}>We'll contact you for verification</p>
       </div>
 
       <div className="flex-1 overflow-auto">
         <div className="w-full max-w-sm mx-auto space-y-4">
           <div>
-            <label className="text-gray-400 text-sm mb-2 block">Full Name *</label>
+            <label className={cx("text-sm mb-2 block", text.secondary)}>Full Name *</label>
             <input
               type="text"
               value={userDetails.name}
               onChange={(e) => setUserDetails({ ...userDetails, name: e.target.value })}
               placeholder="Ahmad bin Abdullah"
-              className="w-full bg-gray-800 border-2 border-gray-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none transition-colors"
+              className={ui.input}
             />
           </div>
 
           <div>
-            <label className="text-gray-400 text-sm mb-2 block">Contact Method *</label>
+            <label className={cx("text-sm mb-2 block", text.secondary)}>Contact Method *</label>
             <div className="grid grid-cols-2 gap-2 mb-2">
               <button
                 onClick={() =>
                   setUserDetails({ ...userDetails, contactType: 'telegram', contact: '' })
                 }
-                className={`py-3 rounded-xl font-medium transition-colors ${
+                className={cx(
+                  ui.btnBase,
+                  "py-3",
                   userDetails.contactType === 'telegram'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                }`}
+                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                    : cx(ui.btnGhost, text.secondary)
+                )}
               >
                 📱 Telegram
               </button>
@@ -84,11 +89,13 @@ export function DetailsScreen({ kiosk }: DetailsScreenProps) {
                 onClick={() =>
                   setUserDetails({ ...userDetails, contactType: 'email', contact: '' })
                 }
-                className={`py-3 rounded-xl font-medium transition-colors ${
+                className={cx(
+                  ui.btnBase,
+                  "py-3",
                   userDetails.contactType === 'email'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                }`}
+                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                    : cx(ui.btnGhost, text.secondary)
+                )}
               >
                 ✉️ Email
               </button>
@@ -100,12 +107,12 @@ export function DetailsScreen({ kiosk }: DetailsScreenProps) {
               placeholder={
                 userDetails.contactType === 'telegram' ? '@your_username' : 'you@email.com'
               }
-              className="w-full bg-gray-800 border-2 border-gray-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none transition-colors"
+              className={ui.input}
             />
           </div>
 
           <div>
-            <label className="text-gray-400 text-sm mb-2 block">
+            <label className={cx("text-sm mb-2 block", text.secondary)}>
               {selectedCrypto} Wallet Address ({selectedNetwork}) *
             </label>
             <textarea
@@ -115,36 +122,38 @@ export function DetailsScreen({ kiosk }: DetailsScreenProps) {
               }
               placeholder={`${network.addressPrefix}...`}
               rows={2}
-              className="w-full bg-gray-800 border-2 border-gray-700 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-blue-500 focus:outline-none transition-colors resize-none"
+              className={cx(ui.textarea, "font-mono text-sm")}
             />
             <div className="flex items-center gap-2 mt-1">
               <span
-                className={`w-2 h-2 rounded-full ${
+                className={cx(
+                  "w-2 h-2 rounded-full",
                   addressValidation.valid
-                    ? 'bg-green-500'
+                    ? validationStyles.valid
                     : userDetails.walletAddress
-                      ? 'bg-red-500'
-                      : 'bg-gray-600'
-                }`}
+                      ? validationStyles.invalid
+                      : validationStyles.empty
+                )}
+                aria-hidden
               />
-              <span className="text-gray-500 text-xs">{network.name} address</span>
+              <span className={cx("text-xs", text.tertiary)}>{network.name} address</span>
             </div>
           </div>
 
           {error && (
-            <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-red-400 text-sm text-center">
+            <div className={ui.error} role="alert" aria-live="polite">
               {error}
             </div>
           )}
 
-          <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+          <div className={cx(ui.cardSoft, "p-4")}>
             <div className="text-sm space-y-2">
               <div className="flex justify-between">
-                <span className="text-gray-400">Amount</span>
+                <span className={text.secondary}>Amount</span>
                 <span className="text-white">{formatMYR(amount)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">You receive</span>
+                <span className={text.secondary}>You receive</span>
                 <span className="font-mono" style={{ color: asset.color }}>
                   {formatCrypto(cryptoAmount, 4)} {selectedCrypto}
                 </span>
@@ -154,7 +163,7 @@ export function DetailsScreen({ kiosk }: DetailsScreenProps) {
 
           <button
             onClick={submitDetails}
-            className="w-full py-4 rounded-2xl font-bold text-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+            className={cx(ui.btnBase, ui.btnPrimary, "w-full py-4 font-bold text-lg")}
             style={{ backgroundColor: asset.color, color: 'white' }}
           >
             Proceed to Payment

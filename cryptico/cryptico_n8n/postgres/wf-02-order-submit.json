@@ -98,7 +98,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const input = $input.first().json;\n\nconst NETWORK_FEES = {\n  'TRC-20': Number($env.CRYPTICO_FEE_TRC20) || 1.00,\n  'ERC-20': Number($env.CRYPTICO_FEE_ERC20) || 15.00,\n  'BTC': Number($env.CRYPTICO_FEE_BTC) || 10.00,\n  'ETH': Number($env.CRYPTICO_FEE_ETH) || 15.00,\n  'SOL': Number($env.CRYPTICO_FEE_SOL) || 0.50,\n  'ICP': Number($env.CRYPTICO_FEE_ICP) || 1.00\n};\n\nconst networkFee = NETWORK_FEES[input.network] || 0;\nconst amountAfterFee = input.amountMYR - networkFee;\nconst cryptoAmount = amountAfterFee / input.currentRate;\n\nconst orderId = 'CK' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();\nconst idempotencyKey = input.idempotencyKey || (orderId + '-' + Date.now());\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  order: {\n    id: orderId,\n    idempotency_key: idempotencyKey,\n    crypto: input.crypto,\n    network: input.network,\n    amount_myr: input.amountMYR,\n    amount_crypto: cryptoAmount,\n    network_fee: networkFee,\n    rate: input.currentRate,\n    base_rate: input.baseRate,\n    customer_name: input.customerName,\n    customer_contact_type: input.contactType,\n    customer_contact: input.contact,\n    wallet_address: input.walletAddress,\n    payment_ref: input.paymentRef || null,\n    has_proof_image: !!input.proofImageBase64,\n    status: 'pending',\n    created_at: now,\n    updated_at: now,\n    kiosk_id: input.kioskId || 'default'\n  },\n  input: input\n} }];"
+        "jsCode": "const input = $input.first().json;\n\nconst NETWORK_FEES = {\n  'TRC-20': Number($env.CRYPTICO_FEE_TRC20) || 1.00,\n  'ERC-20': Number($env.CRYPTICO_FEE_ERC20) || 15.00,\n  'BTC': Number($env.CRYPTICO_FEE_BTC) || 10.00,\n  'ETH': Number($env.CRYPTICO_FEE_ETH) || 15.00,\n  'SOL': Number($env.CRYPTICO_FEE_SOL) || 0.50,\n  'ICP': Number($env.CRYPTICO_FEE_ICP) || 1.00\n};\n\nconst networkFee = NETWORK_FEES[input.network] || 0;\nconst amountAfterFee = input.amountMYR - networkFee;\nconst cryptoAmount = amountAfterFee / input.currentRate;\n\nconst orderId = 'CK' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();\nconst idempotencyKey = input.idempotencyKey || (orderId + '-' + Date.now());\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  order: {\n    id: orderId,\n    idempotency_key: idempotencyKey,\n    crypto: input.crypto,\n    network: input.network,\n    amount_myr: input.amountMYR,\n    amount_crypto: cryptoAmount,\n    network_fee: networkFee,\n    rate: input.currentRate,\n    base_rate: input.baseRate,\n    customer_name: input.customerName,\n    customer_contact_type: input.contactType,\n    customer_contact: input.contact,\n    wallet_address: input.walletAddress,\n    payment_ref: input.paymentRef || null,\n    has_proof_image: !!input.proofImageBase64,\n    status: 'pending',\n    created_at: now,\n    updated_at: now,\n    kiosk_id: input.kioskId || 'default'\n  },\n  input: input,\n  proofImageBase64: input.proofImageBase64 || null\n} }];"
       },
       "id": "20-generate-order",
       "name": "20-generate-order",
@@ -122,7 +122,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const order = $('20-generate-order').first().json.order;\n\nconst CRYPTO_ICONS = { 'USDT': '💵', 'USDC': '🔵', 'BTC': '🟠', 'ETH': '💎', 'SOL': '🟣', 'ICP': '🔷' };\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\nconst formatCrypto = (amount) => Number(amount).toFixed(4);\n\nconst message = `🔔 <b>NEW CRYPTO ORDER</b>\\n\\n📋 <b>Order ID:</b> <code>${order.id}</code>\\n💰 <b>Amount Paid:</b> ${formatMYR(order.amount_myr)}\\n🪙 <b>Crypto:</b> ${CRYPTO_ICONS[order.crypto] || '🪙'} ${formatCrypto(order.amount_crypto)} ${order.crypto}\\n📍 <b>Network:</b> ${order.network}\\n💸 <b>Network Fee:</b> ${formatMYR(order.network_fee)}\\n📊 <b>Rate:</b> 1 ${order.crypto} = ${formatMYR(order.rate)}\\n\\n👤 <b>Customer:</b>\\n├ Name: ${order.customer_name}\\n├ ${order.customer_contact_type === 'telegram' ? 'Telegram' : 'Email'}: ${order.customer_contact}\\n└ Wallet: <code>${order.wallet_address}</code>\\n\\n💳 <b>Payment Ref:</b> ${order.payment_ref || 'Screenshot attached'}\\n📅 <b>Time:</b> ${new Date(order.created_at).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}\\n🏧 <b>Kiosk:</b> ${order.kiosk_id}\\n\\n⏳ <b>Status:</b> Awaiting verification`;\n\nreturn [{ json: { order: order, telegramMessage: message } }];"
+        "jsCode": "const orderData = $('20-generate-order').first().json;\nconst order = orderData.order;\nconst proofImageBase64 = orderData.proofImageBase64;\n\nconst CRYPTO_ICONS = { 'USDT': '💵', 'USDC': '🔵', 'BTC': '🟠', 'ETH': '💎', 'SOL': '🟣', 'ICP': '🔷' };\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\nconst formatCrypto = (amount) => Number(amount).toFixed(4);\n\nconst message = `🔔 <b>NEW ORDER - VERIFICATION REQUIRED</b>\\n\\n📋 <b>Order ID:</b> <code>${order.id}</code>\\n💰 <b>Amount Paid:</b> ${formatMYR(order.amount_myr)}\\n🪙 <b>Crypto:</b> ${CRYPTO_ICONS[order.crypto] || '🪙'} ${formatCrypto(order.amount_crypto)} ${order.crypto}\\n📍 <b>Network:</b> ${order.network}\\n💸 <b>Network Fee:</b> ${formatMYR(order.network_fee)}\\n📊 <b>Rate:</b> 1 ${order.crypto} = ${formatMYR(order.rate)}\\n\\n👤 <b>Customer:</b>\\n├ Name: ${order.customer_name}\\n├ ${order.customer_contact_type === 'telegram' ? 'Telegram' : 'Email'}: ${order.customer_contact}\\n└ Wallet: <code>${order.wallet_address}</code>\\n\\n💳 <b>Payment Ref:</b> ${order.payment_ref || '(see attached screenshot)'}\\n📷 <b>Proof Image:</b> ${order.has_proof_image ? '✅ Attached below' : '❌ None'}\\n📅 <b>Time:</b> ${new Date(order.created_at).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}\\n\\n⏳ <b>Status:</b> Awaiting your verification`;\n\n// Inline keyboard for approve/reject\nconst inlineKeyboard = {\n  inline_keyboard: [\n    [\n      { text: '✅ Approve', callback_data: `approve_${order.id}` },\n      { text: '❌ Reject', callback_data: `reject_${order.id}` }\n    ]\n  ]\n};\n\nreturn [{ json: { order: order, telegramMessage: message, inlineKeyboard: inlineKeyboard, proofImageBase64: proofImageBase64 } }];"
       },
       "id": "30-format-telegram",
       "name": "30-format-telegram",
@@ -132,18 +132,81 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "has-proof", "leftValue": "={{ $json.proofImageBase64 }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "31-check-proof-image",
+      "name": "31-check-proof-image",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2460, 100]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json;\nconst base64 = data.proofImageBase64;\n\n// Remove data URL prefix if present\nlet imageData = base64;\nif (base64.includes(',')) {\n  imageData = base64.split(',')[1];\n}\n\n// Convert base64 to binary\nconst binaryData = Buffer.from(imageData, 'base64');\n\nreturn [{\n  json: data,\n  binary: {\n    data: {\n      data: binaryData.toString('base64'),\n      mimeType: 'image/png',\n      fileName: `proof_${data.order.id}.png`\n    }\n  }\n}];"
+      },
+      "id": "32-prepare-image",
+      "name": "32-prepare-image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2680, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.CRYPTICO_TELEGRAM_BOT_TOKEN }}/sendPhoto",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "chat_id", "value": "={{ $env.CRYPTICO_TELEGRAM_CHAT_ID }}" },
+            { "name": "caption", "value": "=📷 Payment proof for Order <code>{{ $json.order.id }}</code>", "parameterType": "formData" },
+            { "name": "parse_mode", "value": "HTML" },
+            { "name": "photo", "parameterType": "formBinaryData", "inputDataFieldName": "data" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "33-send-proof-image",
+      "name": "33-send-proof-image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2900, 0]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "=https://api.telegram.org/bot{{ $env.CRYPTICO_TELEGRAM_BOT_TOKEN }}/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"chat_id\": \"{{ $env.CRYPTICO_TELEGRAM_CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($json.telegramMessage) }},\n  \"parse_mode\": \"HTML\"\n}",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.CRYPTICO_TELEGRAM_CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($('30-format-telegram').first().json.telegramMessage) }},\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {{ JSON.stringify($('30-format-telegram').first().json.inlineKeyboard) }}\n}",
         "options": { "timeout": 10000 }
       },
-      "id": "35-send-telegram",
-      "name": "35-send-telegram",
+      "id": "35-send-telegram-with-buttons",
+      "name": "35-send-telegram-with-buttons",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2460, 100]
+      "position": [3120, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.CRYPTICO_TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.CRYPTICO_TELEGRAM_CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($json.telegramMessage) }},\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {{ JSON.stringify($json.inlineKeyboard) }}\n}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "35-send-telegram-no-image",
+      "name": "35-send-telegram-no-image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2680, 200]
     },
     {
       "parameters": {
@@ -154,7 +217,7 @@
       "name": "55-format-response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2680, 100]
+      "position": [3340, 100]
     },
     {
       "parameters": {
@@ -166,7 +229,7 @@
       "name": "60-reply-success",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2900, 100]
+      "position": [3560, 100]
     },
     {
       "parameters": {
@@ -203,8 +266,12 @@
     "16-merge-rate": { "main": [[ { "node": "20-generate-order", "type": "main", "index": 0 } ]] },
     "20-generate-order": { "main": [[ { "node": "25-insert-order", "type": "main", "index": 0 } ]] },
     "25-insert-order": { "main": [[ { "node": "30-format-telegram", "type": "main", "index": 0 } ]] },
-    "30-format-telegram": { "main": [[ { "node": "35-send-telegram", "type": "main", "index": 0 } ]] },
-    "35-send-telegram": { "main": [[ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
+    "30-format-telegram": { "main": [[ { "node": "31-check-proof-image", "type": "main", "index": 0 } ]] },
+    "31-check-proof-image": { "main": [[ { "node": "32-prepare-image", "type": "main", "index": 0 } ], [ { "node": "35-send-telegram-no-image", "type": "main", "index": 0 } ]] },
+    "32-prepare-image": { "main": [[ { "node": "33-send-proof-image", "type": "main", "index": 0 } ]] },
+    "33-send-proof-image": { "main": [[ { "node": "35-send-telegram-with-buttons", "type": "main", "index": 0 } ]] },
+    "35-send-telegram-with-buttons": { "main": [[ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
+    "35-send-telegram-no-image": { "main": [[ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
     "55-format-response": { "main": [[ { "node": "60-reply-success", "type": "main", "index": 0 } ]] }
   },
   "settings": { "executionOrder": "v1", "saveExecutionProgress": true, "errorWorkflow": "Cryptico-ATM-07-Error-Handler" },

@@ -2,7 +2,7 @@ import type { CryptoSymbol } from '../../../types'
 import { config } from '../../../config'
 import { CRYPTO_ASSETS } from '../../../lib/constants'
 import { formatMYR } from '../../../lib/utils'
-import { SpinnerIcon } from '../../icons'
+import { ui, cx, text, spinner } from '../../../lib/ui-primitives'
 import type { useKiosk } from '../../../hooks/useKiosk'
 
 interface WelcomeScreenProps {
@@ -32,37 +32,36 @@ export function WelcomeScreen({
           onTouchEnd={onLogoRelease}
         >
           <div className="text-6xl mb-4">🏧</div>
-          <h1 className="text-3xl font-bold text-white mb-2">{config.businessName}</h1>
-          <p className="text-gray-400">{config.businessTagline}</p>
+          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">{config.businessName}</h1>
+          <p className={text.secondary}>{config.businessTagline}</p>
         </div>
 
         <div className="w-full max-w-sm space-y-3">
-          <p className="text-center text-gray-400 text-sm mb-4">
+          <p className={cx("text-center text-sm mb-4", text.secondary)}>
             Select cryptocurrency to buy
           </p>
 
           {pricesLoading ? (
             <div className="text-center py-8">
-              <SpinnerIcon className="w-8 h-8 mx-auto mb-2" />
-              <p className="text-gray-500 text-sm">Loading rates...</p>
+              <div className={cx(spinner.medium, spinner.base, "mx-auto mb-2")} />
+              <p className={cx("text-sm", text.tertiary)}>Loading rates...</p>
             </div>
           ) : (
             Object.entries(CRYPTO_ASSETS).map(([key, asset]) => (
               <button
                 key={key}
                 onClick={() => selectCrypto(key as CryptoSymbol)}
-                className="w-full p-5 rounded-2xl border-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                className={ui.selectionCard}
                 style={{
-                  borderColor: `${asset.color}50`,
-                  background: `linear-gradient(135deg, ${asset.color}10, transparent)`,
+                  background: `linear-gradient(135deg, ${asset.color}18, rgba(255,255,255,0.02) 55%, rgba(255,255,255,0.01))`,
                 }}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <span className="text-3xl">{asset.icon}</span>
+                    <span className="text-3xl" aria-hidden>{asset.icon}</span>
                     <div className="text-left">
-                      <div className="text-white font-bold">{asset.symbol}</div>
-                      <div className="text-gray-500 text-sm">{asset.name}</div>
+                      <div className="text-white font-bold tracking-tight">{asset.symbol}</div>
+                      <div className={cx("text-sm", text.tertiary)}>{asset.name}</div>
                     </div>
                   </div>
                   <div className="text-right">
@@ -71,7 +70,7 @@ export function WelcomeScreen({
                         ? formatMYR(prices[key as CryptoSymbol]!)
                         : '—'}
                     </div>
-                    <div className="text-gray-600 text-xs">{asset.networks.length} networks</div>
+                    <div className={cx("text-xs", text.disabled)}>{asset.networks.length} networks</div>
                   </div>
                 </div>
               </button>
@@ -83,7 +82,7 @@ export function WelcomeScreen({
       <div className="px-6 pb-6">
         <button
           onClick={() => setScreen('lookup')}
-          className="w-full py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors text-sm"
+          className={cx(ui.btnBase, ui.btnGhost, "w-full py-3 text-sm")}
         >
           🔍 Track Existing Order
         </button>

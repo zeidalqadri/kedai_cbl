@@ -9,25 +9,39 @@ export const onRequest: PagesFunction = async (context) => {
   const targetUrl = `${N8N_BASE}${path}${url.search}`
 
   // Clone request and forward to n8n
-  const headers = new Headers(context.request.headers)
-  headers.delete('host')
+  const headers = new Headers()
+  headers.set('Content-Type', 'application/json')
+
+  // Forward auth headers
+  const apiKey = context.request.headers.get('X-API-Key')
+  const adminKey = context.request.headers.get('X-Admin-Key')
+  if (apiKey) headers.set('X-API-Key', apiKey)
+  if (adminKey) headers.set('X-Admin-Key', adminKey)
+
+  // Read body as text to ensure it's fully consumed
+  let body: string | undefined
+  if (context.request.method !== 'GET' && context.request.method !== 'HEAD') {
+    body = await context.request.text()
+  }
 
   const response = await fetch(targetUrl, {
     method: context.request.method,
     headers,
-    body: context.request.method !== 'GET' ? context.request.body : undefined,
+    body,
   })
 
-  // Clone response and add CORS headers
-  const responseHeaders = new Headers(response.headers)
-  responseHeaders.set('Access-Control-Allow-Origin', '*')
-  responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, X-Admin-Key')
+  // Read response body and return with CORS headers
+  const responseBody = await response.text()
 
-  return new Response(response.body, {
+  return new Response(responseBody, {
     status: response.status,
     statusText: response.statusText,
-    headers: responseHeaders,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, X-Admin-Key',
+    },
   })
 }
 
