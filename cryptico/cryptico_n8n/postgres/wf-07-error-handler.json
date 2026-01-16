@@ -1,0 +1,82 @@
+{
+  "name": "Cryptico-ATM-07-Error-Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "01-error-trigger",
+      "name": "01-error-trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const errorData = $input.first().json;\nconst execution = errorData.execution || {};\nconst workflow = errorData.workflow || {};\nconst error = execution.error || {};\n\nconst errorId = `ERR-${Date.now().toString(36).toUpperCase()}`;\n\nconst formatted = {\n  errorId: errorId,\n  timestamp: new Date().toISOString(),\n  workflow: {\n    id: workflow.id || 'unknown',\n    name: workflow.name || 'unknown'\n  },\n  execution: {\n    id: execution.id || 'unknown',\n    mode: execution.mode || 'unknown'\n  },\n  error: {\n    message: error.message || 'Unknown error',\n    name: error.name || 'Error',\n    node: error.node || 'unknown'\n  }\n};\n\nreturn [{ json: formatted }];"
+      },
+      "id": "05-format-error",
+      "name": "05-format-error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO error_log (error_id, workflow_id, workflow_name, execution_id, error_message, error_node, created_at) VALUES ('{{ $json.errorId }}', '{{ $json.workflow.id }}', '{{ $json.workflow.name }}', '{{ $json.execution.id }}', '{{ $json.error.message.replace(/'/g, \"''\") }}', '{{ $json.error.node }}', '{{ $json.timestamp }}')",
+        "options": {}
+      },
+      "id": "10-store-error",
+      "name": "10-store-error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [700, 300],
+      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Cryptico PostgreSQL" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const err = $('05-format-error').first().json;\n\nconst message = `🚨 <b>WORKFLOW ERROR</b>\\n\\n🆔 Error ID: <code>${err.errorId}</code>\\n📋 Workflow: ${err.workflow.name}\\n⚙️ Execution: <code>${err.execution.id}</code>\\n\\n❌ <b>Error:</b>\\n<code>${err.error.message}</code>\\n\\n📍 Node: ${err.error.node}\\n🕐 Time: ${new Date(err.timestamp).toLocaleString('en-MY')}`;\n\nreturn [{ json: { ...err, telegramMessage: message } }];"
+      },
+      "id": "15-format-alert",
+      "name": "15-format-alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.CRYPTICO_TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.CRYPTICO_TELEGRAM_CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($json.telegramMessage) }},\n  \"parse_mode\": \"HTML\"\n}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "20-send-alert",
+      "name": "20-send-alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "99-end",
+      "name": "99-end",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1360, 300]
+    }
+  ],
+  "connections": {
+    "01-error-trigger": { "main": [[ { "node": "05-format-error", "type": "main", "index": 0 } ]] },
+    "05-format-error": { "main": [[ { "node": "10-store-error", "type": "main", "index": 0 } ]] },
+    "10-store-error": { "main": [[ { "node": "15-format-alert", "type": "main", "index": 0 } ]] },
+    "15-format-alert": { "main": [[ { "node": "20-send-alert", "type": "main", "index": 0 } ]] },
+    "20-send-alert": { "main": [[ { "node": "99-end", "type": "main", "index": 0 } ]] }
+  },
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "tags": [{ "name": "cryptico-atm" }, { "name": "error-handler" }]
+}

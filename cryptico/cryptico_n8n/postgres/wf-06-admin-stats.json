@@ -1,0 +1,64 @@
+{
+  "name": "Cryptico-ATM-06-Admin-Stats",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "admin/stats",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "01-trigger-webhook",
+      "name": "01-trigger-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "cryptico-admin-stats",
+      "credentials": { "httpHeaderAuth": { "id": "ADMIN_HEADER_AUTH_CREDENTIAL_ID", "name": "Cryptico Admin Key" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM orders",
+        "options": {}
+      },
+      "id": "10-fetch-all-orders",
+      "name": "10-fetch-all-orders",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 300],
+      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Cryptico PostgreSQL" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const orders = $input.all().map(i => i.json);\nconst now = new Date();\nconst today = new Date(now.getFullYear(), now.getMonth(), now.getDate());\n\nconst sumAmount = (orders) => orders.reduce((sum, o) => sum + Number(o.amount_myr || 0), 0);\nconst countByStatus = (orders) => {\n  const counts = { pending: 0, approved: 0, completed: 0, rejected: 0, cancelled: 0 };\n  orders.forEach(o => counts[o.status] = (counts[o.status] || 0) + 1);\n  return counts;\n};\n\nconst todayOrders = orders.filter(o => new Date(o.created_at) >= today);\nconst allCompleted = orders.filter(o => o.status === 'completed');\nconst allPending = orders.filter(o => o.status === 'pending');\n\nconst stats = {\n  generatedAt: now.toISOString(),\n  overview: {\n    totalOrders: orders.length,\n    totalCompleted: allCompleted.length,\n    totalPending: allPending.length,\n    totalVolumeMYR: sumAmount(allCompleted),\n    successRate: orders.length > 0 ? ((allCompleted.length / orders.length) * 100).toFixed(1) + '%' : '0%'\n  },\n  today: {\n    orders: todayOrders.length,\n    byStatus: countByStatus(todayOrders)\n  },\n  allTime: {\n    byStatus: countByStatus(orders)\n  },\n  recentPending: allPending.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5).map(o => ({ id: o.id, crypto: o.crypto, amountMYR: o.amount_myr, customerName: o.customer_name, createdAt: o.created_at }))\n};\n\nreturn [{ json: stats }];"
+      },
+      "id": "15-compute-stats",
+      "name": "15-compute-stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"stats\": {{ JSON.stringify($json) }}\n}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "20-reply-success",
+      "name": "20-reply-success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 300]
+    }
+  ],
+  "connections": {
+    "01-trigger-webhook": { "main": [[ { "node": "10-fetch-all-orders", "type": "main", "index": 0 } ]] },
+    "10-fetch-all-orders": { "main": [[ { "node": "15-compute-stats", "type": "main", "index": 0 } ]] },
+    "15-compute-stats": { "main": [[ { "node": "20-reply-success", "type": "main", "index": 0 } ]] }
+  },
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true, "errorWorkflow": "Cryptico-ATM-07-Error-Handler" },
+  "tags": [{ "name": "cryptico-atm" }, { "name": "admin-stats" }]
+}

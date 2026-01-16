@@ -1,0 +1,119 @@
+{
+  "name": "Cryptico-ATM-07-Error-Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "01-error-trigger",
+      "name": "01-error-trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Format error information\nconst errorData = $input.first().json;\nconst execution = errorData.execution || {};\nconst workflow = errorData.workflow || {};\nconst error = execution.error || {};\n\nconst errorId = `ERR-${Date.now().toString(36).toUpperCase()}`;\n\nconst formatted = {\n  errorId: errorId,\n  timestamp: new Date().toISOString(),\n  \n  workflow: {\n    id: workflow.id || 'unknown',\n    name: workflow.name || 'unknown'\n  },\n  \n  execution: {\n    id: execution.id || 'unknown',\n    mode: execution.mode || 'unknown',\n    retryOf: execution.retryOf || null\n  },\n  \n  error: {\n    message: error.message || 'Unknown error',\n    name: error.name || 'Error',\n    stack: error.stack || null,\n    node: error.node || 'unknown',\n    timestamp: error.timestamp || new Date().toISOString()\n  },\n  \n  context: {\n    lastNodeExecuted: execution.lastNodeExecuted || null,\n    data: execution.data ? JSON.stringify(execution.data).slice(0, 1000) : null\n  }\n};\n\nreturn [{ json: formatted }];"
+      },
+      "id": "05-format-error",
+      "name": "05-format-error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "error_log",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "error_id", "fieldValue": "={{ $json.errorId }}" },
+            { "fieldName": "workflow_id", "fieldValue": "={{ $json.workflow.id }}" },
+            { "fieldName": "workflow_name", "fieldValue": "={{ $json.workflow.name }}" },
+            { "fieldName": "execution_id", "fieldValue": "={{ $json.execution.id }}" },
+            { "fieldName": "error_message", "fieldValue": "={{ $json.error.message }}" },
+            { "fieldName": "error_node", "fieldValue": "={{ $json.error.node }}" },
+            { "fieldName": "error_stack", "fieldValue": "={{ $json.error.stack }}" },
+            { "fieldName": "context", "fieldValue": "={{ JSON.stringify($json.context) }}" },
+            { "fieldName": "created_at", "fieldValue": "={{ $json.timestamp }}" }
+          ]
+        }
+      },
+      "id": "10-store-error",
+      "name": "10-store-error",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [700, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase API"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Format Telegram alert message\nconst err = $input.first().json;\n\nconst message = `\n🚨 <b>WORKFLOW ERROR</b>\n\n🆔 Error ID: <code>${err.errorId}</code>\n📋 Workflow: ${err.workflow.name}\n⚙️ Execution: <code>${err.execution.id}</code>\n\n❌ <b>Error:</b>\n<code>${err.error.message}</code>\n\n📍 Node: ${err.error.node}\n🕐 Time: ${new Date(err.timestamp).toLocaleString('en-MY')}\n\n<i>Check error_log table for full details.</i>\n`.trim();\n\nreturn [{ json: { ...err, telegramMessage: message } }];"
+      },
+      "id": "15-format-alert",
+      "name": "15-format-alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.TELEGRAM_ADMIN_CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($json.telegramMessage) }},\n  \"parse_mode\": \"HTML\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "20-send-alert",
+      "name": "20-send-alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "99-end",
+      "name": "99-end",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1360, 300]
+    }
+  ],
+  "connections": {
+    "01-error-trigger": {
+      "main": [[ { "node": "05-format-error", "type": "main", "index": 0 } ]]
+    },
+    "05-format-error": {
+      "main": [[ { "node": "10-store-error", "type": "main", "index": 0 } ]]
+    },
+    "10-store-error": {
+      "main": [[ { "node": "15-format-alert", "type": "main", "index": 0 } ]]
+    },
+    "15-format-alert": {
+      "main": [[ { "node": "20-send-alert", "type": "main", "index": 0 } ]]
+    },
+    "20-send-alert": {
+      "main": [[ { "node": "99-end", "type": "main", "index": 0 } ]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true
+  },
+  "tags": [
+    { "name": "cryptico-atm" },
+    { "name": "error-handler" }
+  ],
+  "versionId": "1.0.0"
+}

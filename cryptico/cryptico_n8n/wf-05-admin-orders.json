@@ -1,0 +1,158 @@
+{
+  "name": "Cryptico-ATM-05-Admin-Orders",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "admin/orders",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "01-trigger-webhook",
+      "name": "01-trigger-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "cryptico-admin-orders"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Auth check and parse filters\nconst request = $input.first().json;\nconst headers = request.$headers || {};\n\nconst ADMIN_API_KEY = $env.ADMIN_API_KEY;\nconst providedKey = headers['x-admin-key'] || headers['X-Admin-Key'];\n\nif (!providedKey || providedKey !== ADMIN_API_KEY) {\n  return [{\n    json: {\n      isAuthorized: false,\n      error: 'Invalid or missing admin API key'\n    }\n  }];\n}\n\n// Parse query parameters\nconst query = request.query || {};\nconst filters = {\n  status: query.status || null,\n  crypto: query.crypto || null,\n  dateFrom: query.dateFrom || null,\n  dateTo: query.dateTo || null,\n  kioskId: query.kioskId || null,\n  limit: Math.min(Number(query.limit) || 50, 100),\n  offset: Number(query.offset) || 0,\n  sortBy: query.sortBy || 'created_at',\n  sortOrder: query.sortOrder || 'desc'\n};\n\nreturn [{\n  json: {\n    isAuthorized: true,\n    filters: filters\n  }\n}];"
+      },
+      "id": "05-auth-parse",
+      "name": "05-auth-parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isAuthorized }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "06-auth-gate",
+      "name": "06-auth-gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Build Supabase query - using RPC or direct query\nconst filters = $input.first().json.filters;\n\n// For now, we'll fetch all and filter in code\n// In production, you'd use Supabase RPC for complex queries\nreturn [{\n  json: {\n    filters: filters,\n    queryBuilt: true\n  }\n}];"
+      },
+      "id": "10-build-query",
+      "name": "10-build-query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 200]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "orders",
+        "returnAll": true,
+        "additionalFields": {
+          "order": {
+            "field": "created_at",
+            "direction": "desc"
+          }
+        }
+      },
+      "id": "15-fetch-orders",
+      "name": "15-fetch-orders",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1140, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Apply filters and pagination\nconst filters = $('10-build-query').first().json.filters;\nlet orders = $input.all().map(i => i.json);\n\n// Apply status filter\nif (filters.status) {\n  orders = orders.filter(o => o.status === filters.status);\n}\n\n// Apply crypto filter\nif (filters.crypto) {\n  orders = orders.filter(o => o.crypto === filters.crypto);\n}\n\n// Apply kiosk filter\nif (filters.kioskId) {\n  orders = orders.filter(o => o.kiosk_id === filters.kioskId);\n}\n\n// Apply date filters\nif (filters.dateFrom) {\n  const from = new Date(filters.dateFrom);\n  orders = orders.filter(o => new Date(o.created_at) >= from);\n}\nif (filters.dateTo) {\n  const to = new Date(filters.dateTo);\n  orders = orders.filter(o => new Date(o.created_at) <= to);\n}\n\n// Get total before pagination\nconst total = orders.length;\n\n// Apply pagination\nconst paginated = orders.slice(filters.offset, filters.offset + filters.limit);\n\nreturn [{\n  json: {\n    orders: paginated,\n    pagination: {\n      total: total,\n      limit: filters.limit,\n      offset: filters.offset,\n      hasMore: (filters.offset + filters.limit) < total\n    },\n    filters: filters\n  }\n}];"
+      },
+      "id": "20-filter-paginate",
+      "name": "20-filter-paginate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"orders\": {{ JSON.stringify($json.orders) }},\n  \"pagination\": {{ JSON.stringify($json.pagination) }},\n  \"appliedFilters\": {{ JSON.stringify($json.filters) }}\n}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Cache-Control", "value": "no-store" }
+            ]
+          }
+        }
+      },
+      "id": "25-reply-success",
+      "name": "25-reply-success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1580, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": false,\n  \"error_code\": \"UNAUTHORIZED\",\n  \"message\": \"{{ $json.error }}\"\n}",
+        "options": { "responseCode": 401 }
+      },
+      "id": "99-reply-unauthorized",
+      "name": "99-reply-unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 400]
+    }
+  ],
+  "connections": {
+    "01-trigger-webhook": {
+      "main": [[ { "node": "05-auth-parse", "type": "main", "index": 0 } ]]
+    },
+    "05-auth-parse": {
+      "main": [[ { "node": "06-auth-gate", "type": "main", "index": 0 } ]]
+    },
+    "06-auth-gate": {
+      "main": [
+        [ { "node": "10-build-query", "type": "main", "index": 0 } ],
+        [ { "node": "99-reply-unauthorized", "type": "main", "index": 0 } ]
+      ]
+    },
+    "10-build-query": {
+      "main": [[ { "node": "15-fetch-orders", "type": "main", "index": 0 } ]]
+    },
+    "15-fetch-orders": {
+      "main": [[ { "node": "20-filter-paginate", "type": "main", "index": 0 } ]]
+    },
+    "20-filter-paginate": {
+      "main": [[ { "node": "25-reply-success", "type": "main", "index": 0 } ]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "errorWorkflow": "Cryptico-ATM-07-Error-Handler"
+  },
+  "tags": [
+    { "name": "cryptico-atm" },
+    { "name": "admin-orders" }
+  ],
+  "versionId": "1.0.0"
+}

@@ -1,0 +1,262 @@
+{
+  "name": "Cryptico-ATM-01-Price-Feed",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "ffae8872-87b2-466e-957f-e5584ae1f216",
+      "name": "01-trigger-cron",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1424,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.coingecko.com/api/v3/simple/price",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ids",
+              "value": "tether,usd-coin,bitcoin,ethereum,solana,internet-computer"
+            },
+            {
+              "name": "vs_currencies",
+              "value": "myr"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "636bb780-c324-4e22-bc8d-7a5bb0ba5d91",
+      "name": "05-fetch-coingecko",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1200,
+        160
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const RATE_MARKUP = Number($env.CRYPTICO_RATE_MARKUP_PERCENT || 2) / 100;\nconst response = $input.first().json;\nconst now = new Date().toISOString();\n\nconst SYMBOL_MAP = {\n  'tether': 'USDT',\n  'usd-coin': 'USDC',\n  'bitcoin': 'BTC',\n  'ethereum': 'ETH',\n  'solana': 'SOL',\n  'internet-computer': 'ICP'\n};\n\nconst FALLBACK_PRICES = {\n  'USDT': 4.55,\n  'USDC': 4.55,\n  'BTC': 450000,\n  'ETH': 15000,\n  'SOL': 900,\n  'ICP': 45\n};\n\nconst prices = [];\n\nif (!response || response.statusCode >= 400) {\n  for (const [coingeckoId, symbol] of Object.entries(SYMBOL_MAP)) {\n    const fallbackPrice = FALLBACK_PRICES[symbol];\n    prices.push({\n      json: {\n        symbol: symbol,\n        coingecko_id: coingeckoId,\n        price_myr: fallbackPrice,\n        rate_with_markup: fallbackPrice * (1 + RATE_MARKUP),\n        markup_percent: RATE_MARKUP * 100,\n        updated_at: now,\n        is_fallback: true,\n        fetch_error: true\n      }\n    });\n  }\n  return prices;\n}\n\nfor (const [coingeckoId, symbol] of Object.entries(SYMBOL_MAP)) {\n  const priceData = response[coingeckoId];\n  const priceMyr = priceData?.myr;\n  const hasPriceError = !priceMyr || priceMyr <= 0;\n  const finalPrice = hasPriceError ? FALLBACK_PRICES[symbol] : priceMyr;\n  \n  prices.push({\n    json: {\n      symbol: symbol,\n      coingecko_id: coingeckoId,\n      price_myr: finalPrice,\n      rate_with_markup: finalPrice * (1 + RATE_MARKUP),\n      markup_percent: RATE_MARKUP * 100,\n      updated_at: now,\n      is_fallback: hasPriceError,\n      fetch_error: hasPriceError\n    }\n  });\n}\n\nreturn prices;"
+      },
+      "id": "541d85d4-c1a3-41b3-a253-b18181e5b5a8",
+      "name": "10-apply-markup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -976,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO crypto_prices (symbol, coingecko_id, price_myr, rate_with_markup, markup_percent, is_fallback, updated_at) VALUES ('{{ $json.symbol }}', '{{ $json.coingecko_id }}', {{ $json.price_myr }}, {{ $json.rate_with_markup }}, {{ $json.markup_percent }}, {{ $json.is_fallback }}, '{{ $json.updated_at }}') ON CONFLICT (symbol) DO UPDATE SET coingecko_id = EXCLUDED.coingecko_id, price_myr = EXCLUDED.price_myr, rate_with_markup = EXCLUDED.rate_with_markup, markup_percent = EXCLUDED.markup_percent, is_fallback = EXCLUDED.is_fallback, updated_at = EXCLUDED.updated_at RETURNING *",
+        "options": {}
+      },
+      "id": "eec4d7ac-a368-4718-a4d9-1f3abdbbc483",
+      "name": "15-upsert-postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -752,
+        160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Cryptico PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get data from PostgreSQL output (RETURNING *)\nconst dbResults = $input.all();\n\n// Filter for fallback/error items from DB results\nconst errorItems = dbResults.filter(item => {\n  const isFallback = item.json.is_fallback;\n  return isFallback === true || isFallback === 't' || isFallback === 'true';\n});\n\nconst hasFetchError = errorItems.length > 0;\nconst errorSymbols = errorItems.map(item => item.json.symbol || 'unknown').join(', ');\nconst timestamp = new Date().toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Kuala_Lumpur' });\n\nreturn [{ json: { \n  hasFetchError: hasFetchError, \n  itemCount: dbResults.length,\n  errorCount: errorItems.length,\n  errorSymbols: errorSymbols,\n  timestamp: timestamp\n} }];"
+      },
+      "id": "9e4e232b-037c-45b9-a732-bc3e4e53dcb8",
+      "name": "16-aggregate-check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "error-check",
+              "leftValue": "={{ $json.errorCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "85131a76-893c-4015-ae50-340e3888134e",
+      "name": "17-error-gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.CRYPTICO_TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.CRYPTICO_TELEGRAM_CHAT_ID }}\",\n  \"text\": \"⚠️ <b>PRICE FEED WARNING</b>\\n\\nMissing prices for: {{ $json.errorSymbols }}\\nUsing fallback prices.\\n\\n🕐 Time: {{ $json.timestamp }}\",\n  \"parse_mode\": \"HTML\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "ed1bdc14-0cd0-4729-ad48-13cc4a6c8a1a",
+      "name": "20-notify-error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -96,
+        48
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "8dc190f4-6ab9-44c3-875f-ff4cb25bcb54",
+      "name": "99-end-success",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        256
+      ]
+    }
+  ],
+  "connections": {
+    "01-trigger-cron": {
+      "main": [
+        [
+          {
+            "node": "05-fetch-coingecko",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05-fetch-coingecko": {
+      "main": [
+        [
+          {
+            "node": "10-apply-markup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10-apply-markup": {
+      "main": [
+        [
+          {
+            "node": "15-upsert-postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15-upsert-postgres": {
+      "main": [
+        [
+          {
+            "node": "16-aggregate-check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16-aggregate-check": {
+      "main": [
+        [
+          {
+            "node": "17-error-gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "17-error-gate": {
+      "main": [
+        [
+          {
+            "node": "20-notify-error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "99-end-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "20-notify-error": {
+      "main": [
+        [
+          {
+            "node": "99-end-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9877f8d6e23e16ecfa7b5c7bc18bde445f1a7068b5730107444777faf3e40879"
+  }
+}

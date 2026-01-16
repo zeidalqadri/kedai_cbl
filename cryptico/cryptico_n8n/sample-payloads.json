@@ -1,0 +1,387 @@
+{
+  "_description": "Sample I/O Payloads for Cryptico ATM API",
+  "_version": "1.0.0",
+  
+  "orderSubmit": {
+    "endpoint": "POST /order/submit",
+    "request": {
+      "valid": {
+        "crypto": "USDT",
+        "network": "TRC-20",
+        "amountMYR": 500,
+        "customerName": "Ahmad Ali",
+        "contactType": "telegram",
+        "contact": "@ahmadali",
+        "walletAddress": "TQn7z8bvPxEfJ7yK9mXvzWnVp5N3cHx9Kp",
+        "rateLockTimestamp": 1705312800000,
+        "paymentRef": "2025011512345678",
+        "proofImageBase64": null,
+        "kioskId": "kiosk-001"
+      },
+      "withImage": {
+        "crypto": "USDC",
+        "network": "BEP-20",
+        "amountMYR": 1000,
+        "customerName": "Sarah Lee",
+        "contactType": "email",
+        "contact": "sarah@example.com",
+        "walletAddress": "0x742d35Cc6634C0532925a3b844Bc9e7595f8bDe8",
+        "rateLockTimestamp": 1705312800000,
+        "paymentRef": null,
+        "proofImageBase64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        "kioskId": "kiosk-002"
+      }
+    },
+    "response": {
+      "success": {
+        "ok": true,
+        "orderId": "CK1N5GXYZ123",
+        "status": "pending",
+        "crypto": "USDT",
+        "network": "TRC-20",
+        "amountMYR": 500,
+        "amountCrypto": 111.2358,
+        "rate": 4.49,
+        "networkFee": 1.00,
+        "estimatedDelivery": "15-30 minutes after approval",
+        "message": "Order CK1N5GXYZ123 submitted successfully. You will be notified when your order is processed.",
+        "trackingUrl": "/order/lookup/CK1N5GXYZ123"
+      },
+      "validationError": {
+        "ok": false,
+        "error_code": "VALIDATION_ERROR",
+        "message": "Request validation failed",
+        "errors": [
+          "Missing required field: walletAddress",
+          "amountMYR must be at least 50"
+        ],
+        "context": {
+          "node": "05-validate-input",
+          "receivedAt": "2025-01-15T10:30:00.000Z"
+        }
+      },
+      "rateLockExpired": {
+        "ok": false,
+        "error_code": "RATE_LOCK_EXPIRED",
+        "message": "Rate lock has expired. Please restart your transaction.",
+        "expiredAt": "2025-01-15T10:25:00.000Z",
+        "context": {
+          "node": "10-check-ratelock"
+        }
+      },
+      "invalidWallet": {
+        "ok": false,
+        "error_code": "VALIDATION_ERROR",
+        "message": "Request validation failed",
+        "errors": [
+          "TRC-20 address must start with T",
+          "TRC-20 address must be 34 characters"
+        ]
+      }
+    }
+  },
+  
+  "statusUpdate": {
+    "endpoint": "POST /order/status",
+    "request": {
+      "approve": {
+        "orderId": "CK1N5GXYZ123",
+        "action": "approve",
+        "note": "Payment verified in Maybank at 10:35 AM"
+      },
+      "reject": {
+        "orderId": "CK1N5GXYZ123",
+        "action": "reject",
+        "note": "Payment not received within 15 minutes"
+      },
+      "complete": {
+        "orderId": "CK1N5GXYZ123",
+        "action": "complete",
+        "txHash": "abc123def456789xyz...",
+        "note": "Sent from hot wallet"
+      },
+      "cancel": {
+        "orderId": "CK1N5GXYZ123",
+        "action": "cancel",
+        "note": "Customer requested cancellation"
+      }
+    },
+    "response": {
+      "success": {
+        "ok": true,
+        "orderId": "CK1N5GXYZ123",
+        "previousStatus": "pending",
+        "newStatus": "approved",
+        "action": "approve",
+        "txHash": null,
+        "message": "Order CK1N5GXYZ123 has been approved",
+        "updatedAt": "2025-01-15T10:40:00.000Z"
+      },
+      "unauthorized": {
+        "ok": false,
+        "error_code": "UNAUTHORIZED",
+        "message": "Invalid or missing admin API key"
+      },
+      "notFound": {
+        "ok": false,
+        "error_code": "NOT_FOUND",
+        "message": "Order not found"
+      },
+      "invalidTransition": {
+        "ok": false,
+        "error_code": "INVALID_TRANSITION",
+        "message": "Cannot approve an order with status 'completed'. Allowed actions: none",
+        "currentStatus": "completed",
+        "requestedAction": "approve"
+      }
+    }
+  },
+  
+  "orderLookup": {
+    "endpoint": "GET /order/lookup/:orderId",
+    "response": {
+      "pending": {
+        "ok": true,
+        "order": {
+          "id": "CK1N5GXYZ123",
+          "status": "pending",
+          "statusDisplay": {
+            "label": "Pending Verification",
+            "emoji": "⏳",
+            "description": "Your payment is being verified by our team."
+          },
+          "crypto": "USDT",
+          "network": "TRC-20",
+          "amountMYR": 500,
+          "amountCrypto": 111.2358,
+          "networkFee": 1.00,
+          "rate": 4.49,
+          "customerName": "Ahmad Ali",
+          "walletAddress": "TQn7z8bv...x9Kp",
+          "createdAt": "2025-01-15T10:30:00.000Z",
+          "updatedAt": "2025-01-15T10:30:00.000Z"
+        }
+      },
+      "completed": {
+        "ok": true,
+        "order": {
+          "id": "CK1N5GXYZ123",
+          "status": "completed",
+          "statusDisplay": {
+            "label": "Completed",
+            "emoji": "🎉",
+            "description": "Transaction complete! Check your wallet."
+          },
+          "crypto": "USDT",
+          "network": "TRC-20",
+          "amountMYR": 500,
+          "amountCrypto": 111.2358,
+          "networkFee": 1.00,
+          "rate": 4.49,
+          "customerName": "Ahmad Ali",
+          "walletAddress": "TQn7z8bv...x9Kp",
+          "txHash": "abc123def456789xyz...",
+          "txExplorerUrl": "https://tronscan.org/#/transaction/abc123def456789xyz...",
+          "createdAt": "2025-01-15T10:30:00.000Z",
+          "updatedAt": "2025-01-15T10:45:00.000Z"
+        }
+      },
+      "notFound": {
+        "ok": false,
+        "error_code": "NOT_FOUND",
+        "message": "Order not found. Please check the order ID and try again."
+      },
+      "invalidId": {
+        "ok": false,
+        "error_code": "INVALID_ID",
+        "message": "Invalid order ID format. Expected format: CK followed by 8-15 alphanumeric characters."
+      }
+    }
+  },
+  
+  "adminOrders": {
+    "endpoint": "GET /admin/orders",
+    "queryParams": {
+      "status": "pending|approved|completed|rejected|cancelled",
+      "crypto": "USDT|USDC|BNB|MATIC",
+      "dateFrom": "2025-01-01T00:00:00Z",
+      "dateTo": "2025-01-31T23:59:59Z",
+      "kioskId": "kiosk-001",
+      "limit": "50",
+      "offset": "0"
+    },
+    "response": {
+      "success": {
+        "ok": true,
+        "orders": [
+          {
+            "id": "CK1N5GXYZ123",
+            "idempotency_key": "abc123...",
+            "crypto": "USDT",
+            "network": "TRC-20",
+            "amount_myr": 500,
+            "amount_crypto": 111.2358,
+            "network_fee": 1.00,
+            "rate": 4.49,
+            "customer_name": "Ahmad Ali",
+            "customer_contact_type": "telegram",
+            "customer_contact": "@ahmadali",
+            "wallet_address": "TQn7z8bvPxEfJ7yK9mXvzWnVp5N3cHx9Kp",
+            "payment_ref": "2025011512345678",
+            "status": "pending",
+            "tx_hash": null,
+            "kiosk_id": "kiosk-001",
+            "created_at": "2025-01-15T10:30:00.000Z",
+            "updated_at": "2025-01-15T10:30:00.000Z"
+          }
+        ],
+        "pagination": {
+          "total": 150,
+          "limit": 50,
+          "offset": 0,
+          "hasMore": true
+        },
+        "appliedFilters": {
+          "status": "pending",
+          "crypto": null,
+          "dateFrom": null,
+          "dateTo": null,
+          "kioskId": null,
+          "limit": 50,
+          "offset": 0
+        }
+      }
+    }
+  },
+  
+  "adminStats": {
+    "endpoint": "GET /admin/stats",
+    "response": {
+      "success": {
+        "ok": true,
+        "stats": {
+          "generatedAt": "2025-01-15T10:45:00.000Z",
+          "overview": {
+            "totalOrders": 1250,
+            "totalCompleted": 1180,
+            "totalPending": 15,
+            "totalVolumeMYR": 625000.00,
+            "successRate": "94.4%"
+          },
+          "today": {
+            "orders": 25,
+            "completed": 22,
+            "pending": 3,
+            "volumeMYR": 12500.00,
+            "byStatus": {
+              "pending": 3,
+              "approved": 0,
+              "completed": 22,
+              "rejected": 0,
+              "cancelled": 0
+            }
+          },
+          "thisWeek": {
+            "orders": 175,
+            "completed": 168,
+            "volumeMYR": 87500.00,
+            "byCrypto": {
+              "USDT": { "myr": 52500, "crypto": 11666.67, "count": 105 },
+              "USDC": { "myr": 25000, "crypto": 5555.56, "count": 50 },
+              "BNB": { "myr": 7500, "crypto": 2.63, "count": 10 },
+              "MATIC": { "myr": 2500, "crypto": 1136.36, "count": 10 }
+            }
+          },
+          "thisMonth": {
+            "orders": 650,
+            "completed": 615,
+            "volumeMYR": 325000.00,
+            "byCrypto": {}
+          },
+          "allTime": {
+            "byStatus": {
+              "pending": 15,
+              "approved": 5,
+              "completed": 1180,
+              "rejected": 35,
+              "cancelled": 15
+            },
+            "byCrypto": {
+              "USDT": 750,
+              "USDC": 350,
+              "BNB": 100,
+              "MATIC": 50
+            },
+            "volumeByCrypto": {}
+          },
+          "recentPending": [
+            {
+              "id": "CK1N5GXYZ123",
+              "crypto": "USDT",
+              "amountMYR": 500,
+              "customerName": "Ahmad Ali",
+              "createdAt": "2025-01-15T10:30:00.000Z"
+            }
+          ]
+        }
+      }
+    }
+  },
+  
+  "telegramNotifications": {
+    "newOrder": "🔔 <b>NEW CRYPTO ORDER</b>\n\n📋 <b>Order ID:</b> <code>CK1N5GXYZ123</code>\n💰 <b>Amount Paid:</b> RM 500.00\n🪙 <b>Crypto:</b> 💵 111.2358 USDT\n📍 <b>Network:</b> TRC-20\n💸 <b>Network Fee:</b> RM 1.00\n📊 <b>Rate:</b> 1 USDT = RM 4.49\n\n👤 <b>Customer:</b>\n├ Name: Ahmad Ali\n├ Telegram: @ahmadali\n└ Wallet: <code>TQn7z8bvPxEfJ7yK9mXvzWnVp5N3cHx9Kp</code>\n\n💳 <b>Payment Ref:</b> 2025011512345678\n📅 <b>Time:</b> 15 Jan 2025, 10:30 AM\n🏧 <b>Kiosk:</b> kiosk-001\n\n⏳ <b>Status:</b> Awaiting verification",
+    
+    "statusApproved": "✅ <b>ORDER APPROVED</b>\n\n📋 Order: <code>CK1N5GXYZ123</code>\n👤 Customer: Ahmad Ali\n🪙 Amount: 111.2358 USDT\n📍 Network: TRC-20\n\n📝 <b>Note:</b> Payment verified in Maybank at 10:35 AM\n\n🕐 Updated: 15 Jan 2025, 10:40 AM",
+    
+    "statusCompleted": "🎉 <b>ORDER COMPLETED</b>\n\n📋 Order: <code>CK1N5GXYZ123</code>\n👤 Customer: Ahmad Ali\n🪙 Amount: 111.2358 USDT\n📍 Network: TRC-20\n\n🔗 <b>TX Hash:</b> <a href=\"https://tronscan.org/#/transaction/abc123def456789xyz...\">abc123def456789xyz...</a>\n\n🕐 Updated: 15 Jan 2025, 10:45 AM",
+    
+    "statusRejected": "❌ <b>ORDER REJECTED</b>\n\n📋 Order: <code>CK1N5GXYZ123</code>\n👤 Customer: Ahmad Ali\n🪙 Amount: 111.2358 USDT\n📍 Network: TRC-20\n\n📝 <b>Note:</b> Payment not received within 15 minutes\n\n🕐 Updated: 15 Jan 2025, 10:45 AM",
+    
+    "errorAlert": "🚨 <b>WORKFLOW ERROR</b>\n\n🆔 Error ID: <code>ERR-1N5GXYZ</code>\n📋 Workflow: Cryptico-ATM-02-Order-Submit\n⚙️ Execution: <code>exec_123456</code>\n\n❌ <b>Error:</b>\n<code>Database connection timeout</code>\n\n📍 Node: 25-insert-order\n🕐 Time: 15 Jan 2025, 10:35 AM\n\n<i>Check error_log table for full details.</i>"
+  },
+  
+  "walletValidation": {
+    "TRC-20": {
+      "valid": ["TQn7z8bvPxEfJ7yK9mXvzWnVp5N3cHx9Kp"],
+      "invalid": [
+        { "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f8bDe8", "error": "TRC-20 address must start with T" },
+        { "address": "TQn7z8bv", "error": "TRC-20 address must be 34 characters" }
+      ]
+    },
+    "BEP-20": {
+      "valid": ["0x742d35Cc6634C0532925a3b844Bc9e7595f8bDe8"],
+      "invalid": [
+        { "address": "TQn7z8bvPxEfJ7yK9mXvzWnVp5N3cHx9Kp", "error": "BEP-20 address must start with 0x" },
+        { "address": "0x742d35Cc", "error": "BEP-20 address must be 42 characters" },
+        { "address": "0xGGGd35Cc6634C0532925a3b844Bc9e7595f8bDe8", "error": "Invalid address format" }
+      ]
+    },
+    "ERC-20": {
+      "valid": ["0x742d35Cc6634C0532925a3b844Bc9e7595f8bDe8"],
+      "invalid": [
+        { "address": "TQn7z8bvPxEfJ7yK9mXvzWnVp5N3cHx9Kp", "error": "ERC-20 address must start with 0x" }
+      ]
+    },
+    "POLYGON": {
+      "valid": ["0x742d35Cc6634C0532925a3b844Bc9e7595f8bDe8"],
+      "invalid": [
+        { "address": "TQn7z8bvPxEfJ7yK9mXvzWnVp5N3cHx9Kp", "error": "POLYGON address must start with 0x" }
+      ]
+    }
+  },
+  
+  "networkCryptoCompatibility": {
+    "USDT": ["TRC-20", "BEP-20", "ERC-20", "POLYGON"],
+    "USDC": ["TRC-20", "BEP-20", "ERC-20", "POLYGON"],
+    "BNB": ["BEP-20"],
+    "MATIC": ["POLYGON", "ERC-20"]
+  },
+  
+  "statusTransitions": {
+    "pending": ["approve", "reject", "cancel"],
+    "approved": ["complete", "cancel"],
+    "completed": [],
+    "rejected": [],
+    "cancelled": []
+  }
+}

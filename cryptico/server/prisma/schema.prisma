@@ -1,0 +1,169 @@
+// Prisma schema for CryptoKiosk
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum CryptoSymbol {
+  USDT
+  USDC
+  BNB
+  MATIC
+}
+
+enum NetworkType {
+  TRC20   @map("TRC-20")
+  BEP20   @map("BEP-20")
+  ERC20   @map("ERC-20")
+  POLYGON
+}
+
+enum OrderStatus {
+  pending
+  approved
+  completed
+  rejected
+}
+
+enum ContactType {
+  telegram
+  email
+}
+
+enum AuditAction {
+  ORDER_CREATED
+  ORDER_APPROVED
+  ORDER_REJECTED
+  ORDER_COMPLETED
+  ADMIN_LOGIN
+  ADMIN_LOGOUT
+  SETTINGS_CHANGED
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
+model Order {
+  id            String       @id @default(cuid())
+  crypto        CryptoSymbol
+  network       NetworkType
+  amountMYR     Float
+  amountCrypto  Float
+  networkFee    Float
+  rate          Float
+
+  // Customer details
+  customerName     String
+  walletAddress    String
+  contactType      ContactType
+  contactValue     String
+
+  // Payment info
+  paymentRef       String?
+  hasProofImage    Boolean      @default(false)
+  proofImageUrl    String?
+
+  // Status tracking
+  status           OrderStatus  @default(pending)
+  txHash           String?
+
+  // Timestamps
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Relations
+  auditLogs        AuditLog[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([customerName])
+}
+
+model AdminUser {
+  id            String     @id @default(cuid())
+  username      String     @unique
+  passwordHash  String
+  isActive      Boolean    @default(true)
+  lastLoginAt   DateTime?
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Relations
+  auditLogs     AuditLog[]
+  sessions      Session[]
+}
+
+model Session {
+  id            String     @id @default(cuid())
+  token         String     @unique
+  adminId       String
+  admin         AdminUser  @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  ipAddress     String?
+  userAgent     String?
+
+  expiresAt     DateTime
+  createdAt     DateTime   @default(now())
+
+  @@index([token])
+  @@index([adminId])
+}
+
+model AuditLog {
+  id            String       @id @default(cuid())
+  action        AuditAction
+  details       Json?
+
+  // Optional relations
+  orderId       String?
+  order         Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  adminId       String?
+  admin         AdminUser?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  ipAddress     String?
+  userAgent     String?
+
+  createdAt     DateTime     @default(now())
+
+  @@index([action])
+  @@index([orderId])
+  @@index([adminId])
+  @@index([createdAt])
+}
+
+model Settings {
+  id            String   @id @default("default")
+
+  // Business settings
+  businessName  String   @default("CryptoKiosk")
+  businessTagline String @default("Buy Crypto with DuitNow")
+  supportTelegram String @default("@support")
+  supportEmail  String   @default("support@example.com")
+
+  // Transaction limits
+  minAmount     Float    @default(50)
+  maxAmount     Float    @default(5000)
+  rateMarkup    Float    @default(3)  // percentage
+  rateLockDuration Int   @default(300) // seconds
+
+  // Network fees (MYR)
+  feeTRC20      Float    @default(1.0)
+  feeBEP20      Float    @default(2.5)
+  feeERC20      Float    @default(15.0)
+  feePOLYGON    Float    @default(0.5)
+
+  updatedAt     DateTime @updatedAt
+}
