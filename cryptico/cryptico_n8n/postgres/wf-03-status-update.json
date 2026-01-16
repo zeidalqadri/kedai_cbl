@@ -1,5 +1,7 @@
 {
+  "id": "Rwwm8yma9jexODs4",
   "name": "Cryptico-ATM-03-Status-Update",
+  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -15,7 +17,7 @@
       "typeVersion": 2,
       "position": [260, 300],
       "webhookId": "cryptico-status-update",
-      "credentials": { "httpHeaderAuth": { "id": "ADMIN_HEADER_AUTH_CREDENTIAL_ID", "name": "Cryptico Admin Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "L7j6V9fwqAW2mVNn", "name": "Cryptico Admin Key" } }
     },
     {
       "parameters": {
@@ -29,7 +31,14 @@
       "position": [480, 300]
     },
     {
-      "parameters": { "conditions": { "boolean": [{ "value1": "={{ $json.isValid }}", "value2": true }] } },
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "valid-check", "leftValue": "={{ $json.isValid }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
       "id": "06-validation-gate",
       "name": "06-validation-gate",
       "type": "n8n-nodes-base.if",
@@ -47,10 +56,17 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [920, 200],
-      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Cryptico PostgreSQL" } }
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
     },
     {
-      "parameters": { "conditions": { "string": [{ "value1": "={{ $json.id }}", "operation": "isNotEmpty" }] } },
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "exists-check", "leftValue": "={{ $json.id }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
       "id": "11-order-exists",
       "name": "11-order-exists",
       "type": "n8n-nodes-base.if",
@@ -69,7 +85,14 @@
       "position": [1360, 100]
     },
     {
-      "parameters": { "conditions": { "boolean": [{ "value1": "={{ $json.canTransition }}", "value2": true }] } },
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "can-transition-check", "leftValue": "={{ $json.canTransition }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
       "id": "16-transition-gate",
       "name": "16-transition-gate",
       "type": "n8n-nodes-base.if",
@@ -87,7 +110,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [1800, 0],
-      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Cryptico PostgreSQL" } }
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
     },
     {
       "parameters": {
@@ -100,12 +123,12 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [2020, 0],
-      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Cryptico PostgreSQL" } }
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const order = $('15-validate-transition').first().json;\n\nconst STATUS_EMOJI = { 'approved': '✅', 'rejected': '❌', 'completed': '🎉', 'cancelled': '🚫' };\nconst NETWORK_EXPLORERS = { 'TRC-20': 'https://tronscan.org/#/transaction/', 'BEP-20': 'https://bscscan.com/tx/', 'ERC-20': 'https://etherscan.io/tx/', 'POLYGON': 'https://polygonscan.com/tx/' };\n\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\nconst formatCrypto = (amount) => Number(amount).toFixed(4);\n\nlet message = `${STATUS_EMOJI[order.newStatus] || '📋'} <b>ORDER ${order.newStatus.toUpperCase()}</b>\\n\\n📋 Order: <code>${order.id}</code>\\n👤 Customer: ${order.customer_name}\\n🪙 Amount: ${formatCrypto(order.amount_crypto)} ${order.crypto}\\n📍 Network: ${order.network}`;\n\nif (order.newStatus === 'completed' && order.txHash) {\n  const explorer = NETWORK_EXPLORERS[order.network] || '';\n  message += `\\n\\n🔗 <b>TX Hash:</b> <a href=\"${explorer}${order.txHash}\">${order.txHash.slice(0, 20)}...</a>`;\n}\n\nif (order.adminNote) message += `\\n\\n📝 <b>Note:</b> ${order.adminNote}`;\nmessage += `\\n\\n🕐 Updated: ${new Date().toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}`;\n\nreturn [{ json: { ...order, telegramMessage: message } }];"
+        "jsCode": "const order = $('15-validate-transition').first().json;\n\nconst STATUS_EMOJI = { 'approved': '✅', 'rejected': '❌', 'completed': '🎉', 'cancelled': '🚫' };\nconst NETWORK_EXPLORERS = { 'TRC-20': 'https://tronscan.org/#/transaction/', 'ERC-20': 'https://etherscan.io/tx/', 'BTC': 'https://blockchair.com/bitcoin/transaction/', 'ETH': 'https://etherscan.io/tx/', 'SOL': 'https://solscan.io/tx/', 'ICP': 'https://dashboard.internetcomputer.org/transaction/' };\n\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\nconst formatCrypto = (amount) => Number(amount).toFixed(4);\n\nlet message = `${STATUS_EMOJI[order.newStatus] || '📋'} <b>ORDER ${order.newStatus.toUpperCase()}</b>\\n\\n📋 Order: <code>${order.id}</code>\\n👤 Customer: ${order.customer_name}\\n🪙 Amount: ${formatCrypto(order.amount_crypto)} ${order.crypto}\\n📍 Network: ${order.network}`;\n\nif (order.newStatus === 'completed' && order.txHash) {\n  const explorer = NETWORK_EXPLORERS[order.network] || '';\n  message += `\\n\\n🔗 <b>TX Hash:</b> <a href=\"${explorer}${order.txHash}\">${order.txHash.slice(0, 20)}...</a>`;\n}\n\nif (order.adminNote) message += `\\n\\n📝 <b>Note:</b> ${order.adminNote}`;\nmessage += `\\n\\n🕐 Updated: ${new Date().toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}`;\n\nreturn [{ json: { ...order, telegramMessage: message } }];"
       },
       "id": "30-format-telegram",
       "name": "30-format-telegram",

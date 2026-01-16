@@ -1,5 +1,7 @@
 {
+  "id": "DldiymcBP4AIKf3S",
   "name": "Cryptico-ATM-07-Error-Handler",
+  "active": false,
   "nodes": [
     {
       "parameters": {},
@@ -31,7 +33,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [700, 300],
-      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Cryptico PostgreSQL" } },
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } },
       "continueOnFail": true
     },
     {
