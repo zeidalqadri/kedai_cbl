@@ -3,8 +3,7 @@ import type { Order, OrderStatus } from '../../types'
 import { CRYPTO_ASSETS, NETWORKS } from '../../lib/constants'
 import { config } from '../../config'
 import { formatMYR, formatCrypto, formatDate, copyToClipboard } from '../../lib/utils'
-import { orderStorage } from '../../lib/storage'
-import { notifyStatusUpdate } from '../../lib/telegram'
+import { adminApi, adminOrderToOrder } from '../../lib/api'
 import { RefreshIcon, XIcon, CopyIcon, ExternalLinkIcon } from '../icons'
 
 interface AdminDashboardProps {
@@ -21,10 +20,18 @@ export function AdminDashboard({ onExit }: AdminDashboardProps) {
   const [txHash, setTxHash] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
 
+  const [apiError, setApiError] = useState('')
+
   const loadOrders = async () => {
     setLoading(true)
-    const data = await orderStorage.getAll()
-    setOrders(data)
+    setApiError('')
+    const result = await adminApi.getOrders({ limit: 100 })
+    if (result.success && result.data) {
+      setOrders(result.data.orders.map(adminOrderToOrder))
+    } else {
+      setApiError(result.error || 'Failed to load orders')
+      setOrders([])
+    }
     setLoading(false)
   }
 
@@ -52,11 +59,15 @@ export function AdminDashboard({ onExit }: AdminDashboardProps) {
 
   const handleApprove = async (order: Order) => {
     setActionLoading(true)
-    const updated = await orderStorage.update(order.id, { status: 'approved' })
-    if (updated) {
-      await notifyStatusUpdate(updated, 'approved')
+    setApiError('')
+    const result = await adminApi.approveOrder(order.id)
+    if (result.success) {
       await loadOrders()
-      setSelectedOrder(updated)
+      // Find updated order in list
+      const updated = orders.find(o => o.id === order.id)
+      if (updated) setSelectedOrder({ ...updated, status: 'approved' })
+    } else {
+      setApiError(result.error || 'Failed to approve order')
     }
     setActionLoading(false)
   }
@@ -64,26 +75,28 @@ export function AdminDashboard({ onExit }: AdminDashboardProps) {
   const handleComplete = async (order: Order) => {
     if (!txHash.trim()) return
     setActionLoading(true)
-    const updated = await orderStorage.update(order.id, {
-      status: 'completed',
-      txHash: txHash.trim(),
-    })
-    if (updated) {
-      await notifyStatusUpdate(updated, 'completed', txHash.trim())
+    setApiError('')
+    const result = await adminApi.completeOrder(order.id, txHash.trim())
+    if (result.success) {
       await loadOrders()
-      setSelectedOrder(updated)
+      setSelectedOrder({ ...order, status: 'completed', txHash: txHash.trim() })
       setTxHash('')
+    } else {
+      setApiError(result.error || 'Failed to complete order')
     }
     setActionLoading(false)
   }
 
   const handleReject = async (order: Order) => {
     setActionLoading(true)
-    const updated = await orderStorage.update(order.id, { status: 'rejected' })
-    if (updated) {
-      await notifyStatusUpdate(updated, 'rejected')
+    setApiError('')
+    const result = await adminApi.rejectOrder(order.id)
+    if (result.success) {
       await loadOrders()
-      setSelectedOrder(updated)
+      const updated = orders.find(o => o.id === order.id)
+      if (updated) setSelectedOrder({ ...updated, status: 'rejected' })
+    } else {
+      setApiError(result.error || 'Failed to reject order')
     }
     setActionLoading(false)
   }
@@ -140,6 +153,21 @@ export function AdminDashboard({ onExit }: AdminDashboardProps) {
             <div className="text-2xl font-bold text-blue-400">{formatMYR(stats.todayVolume)}</div>
           </div>
         </div>
+
+        {/* API Error */}
+        {apiError && (
+          <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 mb-4">
+            <div className="flex items-center justify-between">
+              <span className="text-red-400">{apiError}</span>
+              <button
+                onClick={() => setApiError('')}
+                className="text-red-400 hover:text-red-300"
+              >
+                <XIcon />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex gap-2 mb-4 overflow-x-auto pb-2">

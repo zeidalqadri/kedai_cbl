@@ -8,8 +8,10 @@ const COINGECKO_API = 'https://api.coingecko.com/api/v3'
 const FALLBACK_PRICES: PriceMap = {
   USDT: 4.55,
   USDC: 4.55,
-  BNB: 2850,
-  MATIC: 2.2,
+  BTC: 460000,
+  ETH: 14500,
+  SOL: 980,
+  ICP: 55,
 }
 
 // Fetch current prices from CoinGecko
