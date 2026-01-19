@@ -1,0 +1,164 @@
+{
+  "name": "CBL-Popshop-02-Order-Lookup",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "popshop/order/lookup",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "popshop-order-lookup"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract order_id from query params\nconst orderId = $input.first().json.query?.order_id || '';\n\n// Validate order ID format (PS prefix for Popshop)\nconst isValid = /^PS[A-Z0-9]{6,8}$/i.test(orderId);\n\nreturn [{\n  json: {\n    orderId: orderId.toUpperCase(),\n    isValid,\n    errorMessage: isValid ? null : 'Invalid order ID format. Expected format: PS followed by 6-8 alphanumeric characters (e.g., PS1A2B3C)'\n  }\n}];"
+      },
+      "id": "validate",
+      "name": "Validate Order ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-valid",
+      "name": "Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM popshop_orders WHERE order_id = '{{ $json.orderId }}';",
+        "options": {}
+      },
+      "id": "fetch-order",
+      "name": "Fetch Order",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [920, 200],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "check-found",
+      "name": "Order Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1140, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const order = $input.first().json[0];\n\n// Status display mapping\nconst STATUS_MAP = {\n  'pending': { emoji: '⏳', label: 'Pending Payment Verification' },\n  'confirmed': { emoji: '✅', label: 'Order Confirmed' },\n  'processing': { emoji: '📦', label: 'Processing & Packing' },\n  'shipped': { emoji: '🚚', label: 'Shipped' },\n  'delivered': { emoji: '🎉', label: 'Delivered' },\n  'cancelled': { emoji: '❌', label: 'Cancelled' },\n  'refunded': { emoji: '💸', label: 'Refunded' }\n};\n\nconst status = STATUS_MAP[order.status] || { emoji: '❓', label: order.status };\n\n// Sanitize customer data for public display\nconst sanitized = {\n  order_id: order.order_id,\n  status: order.status,\n  status_display: `${status.emoji} ${status.label}`,\n  items: order.items,\n  subtotal: order.subtotal,\n  shipping_fee: order.shipping_fee,\n  total: order.total,\n  tracking_number: order.tracking_number || null,\n  courier: order.courier || null,\n  created_at: order.created_at,\n  updated_at: order.updated_at\n};\n\nreturn [{ json: sanitized }];"
+      },
+      "id": "sanitize",
+      "name": "Sanitize Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, order: $json }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1580, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Order not found', code: 'NOT_FOUND' }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "not-found-response",
+      "name": "Not Found Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.errorMessage, code: 'INVALID_FORMAT' }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "invalid-response",
+      "name": "Invalid ID Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Validate Order ID", "type": "main", "index": 0 }]]
+    },
+    "Validate Order ID": {
+      "main": [[{ "node": "Is Valid?", "type": "main", "index": 0 }]]
+    },
+    "Is Valid?": {
+      "main": [
+        [{ "node": "Fetch Order", "type": "main", "index": 0 }],
+        [{ "node": "Invalid ID Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Order": {
+      "main": [[{ "node": "Order Found?", "type": "main", "index": 0 }]]
+    },
+    "Order Found?": {
+      "main": [
+        [{ "node": "Sanitize Response", "type": "main", "index": 0 }],
+        [{ "node": "Not Found Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Sanitize Response": {
+      "main": [[{ "node": "Success Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

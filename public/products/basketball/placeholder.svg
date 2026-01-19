@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <circle cx="100" cy="100" r="90" fill="#FF6B35"/>
+  <path d="M100 10 Q150 100 100 190" stroke="#000" stroke-width="3" fill="none" opacity="0.3"/>
+  <path d="M100 10 Q50 100 100 190" stroke="#000" stroke-width="3" fill="none" opacity="0.3"/>
+  <path d="M10 100 Q100 50 190 100" stroke="#000" stroke-width="3" fill="none" opacity="0.3"/>
+  <path d="M10 100 Q100 150 190 100" stroke="#000" stroke-width="3" fill="none" opacity="0.3"/>
+  <text x="100" y="108" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="white">CBL</text>
+</svg>

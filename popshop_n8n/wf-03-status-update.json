@@ -1,0 +1,273 @@
+{
+  "name": "CBL-Popshop-03-Status-Update",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "popshop/order/status",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "popshop-status-update",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L7j6V9fwqAW2mVNn",
+          "name": "Cryptico Admin Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\n\nconst orderId = body.order_id || '';\nconst newStatus = body.status || '';\nconst trackingNumber = body.tracking_number || null;\nconst courier = body.courier || null;\nconst adminNotes = body.admin_notes || null;\n\n// Valid statuses for product orders\nconst validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];\n\n// Valid status transitions\nconst validTransitions = {\n  'pending': ['confirmed', 'cancelled'],\n  'confirmed': ['processing', 'cancelled', 'refunded'],\n  'processing': ['shipped', 'cancelled', 'refunded'],\n  'shipped': ['delivered', 'refunded'],\n  'delivered': ['refunded'],\n  'cancelled': [],\n  'refunded': []\n};\n\nconst isValidOrderId = /^PS[A-Z0-9]{6,8}$/i.test(orderId);\nconst isValidStatus = validStatuses.includes(newStatus);\n\n// Shipping info required when marking as shipped\nconst requiresShipping = newStatus === 'shipped';\nconst hasShippingInfo = trackingNumber && courier;\n\nlet errorMessage = null;\nif (!isValidOrderId) errorMessage = 'Invalid order ID format';\nelse if (!isValidStatus) errorMessage = `Invalid status. Must be one of: ${validStatuses.join(', ')}`;\nelse if (requiresShipping && !hasShippingInfo) errorMessage = 'Tracking number and courier required when marking as shipped';\n\nreturn [{\n  json: {\n    orderId: orderId.toUpperCase(),\n    newStatus,\n    trackingNumber,\n    courier,\n    adminNotes,\n    validTransitions,\n    isValid: !errorMessage,\n    errorMessage\n  }\n}];"
+      },
+      "id": "validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-valid",
+      "name": "Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, order_id, status, customer_name, customer_email, total FROM popshop_orders WHERE order_id = '{{ $json.orderId }}';",
+        "options": {}
+      },
+      "id": "fetch-order",
+      "name": "Fetch Order",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [920, 200],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $input.first().json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "check-found",
+      "name": "Order Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1140, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const order = $('Fetch Order').first().json[0];\nconst input = $('Validate Input').first().json;\nconst validTransitions = input.validTransitions;\n\nconst currentStatus = order.status;\nconst newStatus = input.newStatus;\nconst allowedTransitions = validTransitions[currentStatus] || [];\n\nconst isValidTransition = allowedTransitions.includes(newStatus);\n\nreturn [{\n  json: {\n    ...input,\n    dbId: order.id,\n    currentStatus,\n    customerName: order.customer_name,\n    customerEmail: order.customer_email,\n    totalAmount: order.total,\n    isValidTransition,\n    allowedTransitions,\n    errorMessage: isValidTransition ? null : `Cannot transition from '${currentStatus}' to '${newStatus}'. Allowed: ${allowedTransitions.join(', ') || 'none (terminal state)'}`\n  }\n}];"
+      },
+      "id": "check-transition",
+      "name": "Check Transition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValidTransition }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "can-transition",
+      "name": "Can Transition?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1580, 100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE popshop_orders SET \n  status = '{{ $json.newStatus }}',\n  tracking_number = {{ $json.trackingNumber ? \"'\" + $json.trackingNumber + \"'\" : 'tracking_number' }},\n  courier = {{ $json.courier ? \"'\" + $json.courier + \"'\" : 'courier' }},\n  admin_notes = {{ $json.adminNotes ? \"'\" + $json.adminNotes.replace(/'/g, \"''\") + \"'\" : 'admin_notes' }},\n  updated_at = NOW()\nWHERE order_id = '{{ $json.orderId }}'\nRETURNING *;",
+        "options": {}
+      },
+      "id": "update-order",
+      "name": "Update Order",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1800, 0],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO popshop_audit_log (entity_type, entity_id, action, old_value, new_value, details)\nVALUES ('order', '{{ $json.orderId }}', 'status_change', '{{ $json.currentStatus }}', '{{ $json.newStatus }}', '{{ JSON.stringify({ tracking: $json.trackingNumber, courier: $json.courier, notes: $json.adminNotes }).replace(/'/g, \"''\") }}');",
+        "options": {}
+      },
+      "id": "audit-log",
+      "name": "Audit Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2020, 0],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.POPSHOP_TELEGRAM_CHAT_ID }}",
+        "text": "=📦 *CBL Popshop Order Update*\n\nOrder: `{{ $json.orderId }}`\nCustomer: {{ $json.customerName }}\nStatus: {{ $json.currentStatus }} → *{{ $json.newStatus }}*\nAmount: RM {{ $json.totalAmount }}\n{{ $json.trackingNumber ? '\\n🚚 Tracking: ' + $json.trackingNumber + ' (' + $json.courier + ')' : '' }}\n{{ $json.adminNotes ? '\\n📝 Notes: ' + $json.adminNotes : '' }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram",
+      "name": "Telegram Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2240, 0],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cbl",
+          "name": "CBL Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, order_id: $json.orderId, old_status: $json.currentStatus, new_status: $json.newStatus, tracking_number: $json.trackingNumber, courier: $json.courier }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2460, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.errorMessage, code: 'INVALID_TRANSITION', current_status: $json.currentStatus, allowed_transitions: $json.allowedTransitions }) }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "transition-error",
+      "name": "Transition Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1800, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Order not found', code: 'NOT_FOUND' }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "not-found-response",
+      "name": "Not Found Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.errorMessage, code: 'VALIDATION_ERROR' }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "invalid-response",
+      "name": "Invalid Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]]
+    },
+    "Validate Input": {
+      "main": [[{ "node": "Is Valid?", "type": "main", "index": 0 }]]
+    },
+    "Is Valid?": {
+      "main": [
+        [{ "node": "Fetch Order", "type": "main", "index": 0 }],
+        [{ "node": "Invalid Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Order": {
+      "main": [[{ "node": "Order Found?", "type": "main", "index": 0 }]]
+    },
+    "Order Found?": {
+      "main": [
+        [{ "node": "Check Transition", "type": "main", "index": 0 }],
+        [{ "node": "Not Found Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Check Transition": {
+      "main": [[{ "node": "Can Transition?", "type": "main", "index": 0 }]]
+    },
+    "Can Transition?": {
+      "main": [
+        [{ "node": "Update Order", "type": "main", "index": 0 }],
+        [{ "node": "Transition Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Update Order": {
+      "main": [[{ "node": "Audit Log", "type": "main", "index": 0 }]]
+    },
+    "Audit Log": {
+      "main": [[{ "node": "Telegram Notification", "type": "main", "index": 0 }]]
+    },
+    "Telegram Notification": {
+      "main": [[{ "node": "Success Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

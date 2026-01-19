@@ -1,76 +1,122 @@
-import { useState, useCallback } from 'react'
-import type { CartItem, Product } from '../lib/types'
+import { useState, useCallback, useMemo } from 'react'
+import type { CartItem, Cart } from '../types'
+import { config } from '../config'
+import { getProductPrice, getProductById } from '../lib/constants'
 
-export function useCart() {
+interface UseCartReturn {
+  // Cart state
+  cart: Cart
+  items: CartItem[]
+  itemCount: number
+  isEmpty: boolean
+
+  // Actions
+  addItem: (productId: string, size: string, quantity?: number) => void
+  updateQuantity: (productId: string, size: string, quantity: number) => void
+  removeItem: (productId: string, size: string) => void
+  clearCart: () => void
+
+  // Computed
+  getItemQuantity: (productId: string, size: string) => number
+}
+
+export function useCart(): UseCartReturn {
   const [items, setItems] = useState<CartItem[]>([])
-  const [isOpen, setIsOpen] = useState(false)
 
-  const addItem = useCallback((product: Product, size: string) => {
-    setItems((prev) => {
+  // Add item to cart
+  const addItem = useCallback((productId: string, size: string, quantity: number = 1) => {
+    const product = getProductById(productId)
+    if (!product) return
+
+    const price = getProductPrice(productId, size)
+
+    setItems(prev => {
       const existingIndex = prev.findIndex(
-        (item) => item.product.id === product.id && item.size === size
+        item => item.productId === productId && item.size === size
       )
 
-      if (existingIndex > -1) {
+      if (existingIndex >= 0) {
+        // Update existing item quantity
         const updated = [...prev]
         updated[existingIndex] = {
           ...updated[existingIndex],
-          quantity: updated[existingIndex].quantity + 1,
+          quantity: updated[existingIndex].quantity + quantity,
         }
         return updated
       }
 
-      return [...prev, { product, size, quantity: 1 }]
+      // Add new item
+      return [...prev, { productId, size, quantity, price }]
     })
-    setIsOpen(true)
   }, [])
 
-  const removeItem = useCallback((productId: string, size: string) => {
-    setItems((prev) =>
-      prev.filter(
-        (item) => !(item.product.id === productId && item.size === size)
+  // Update item quantity
+  const updateQuantity = useCallback((productId: string, size: string, quantity: number) => {
+    if (quantity <= 0) {
+      removeItem(productId, size)
+      return
+    }
+
+    setItems(prev =>
+      prev.map(item =>
+        item.productId === productId && item.size === size
+          ? { ...item, quantity }
+          : item
       )
     )
   }, [])
 
-  const updateQuantity = useCallback(
-    (productId: string, size: string, quantity: number) => {
-      if (quantity < 1) {
-        removeItem(productId, size)
-        return
-      }
+  // Remove item from cart
+  const removeItem = useCallback((productId: string, size: string) => {
+    setItems(prev =>
+      prev.filter(item => !(item.productId === productId && item.size === size))
+    )
+  }, [])
 
-      setItems((prev) =>
-        prev.map((item) =>
-          item.product.id === productId && item.size === size
-            ? { ...item, quantity }
-            : item
-        )
-      )
-    },
-    [removeItem]
-  )
-
+  // Clear entire cart
   const clearCart = useCallback(() => {
     setItems([])
   }, [])
 
-  const total = items.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
-    0
+  // Get quantity for a specific item
+  const getItemQuantity = useCallback((productId: string, size: string): number => {
+    const item = items.find(i => i.productId === productId && i.size === size)
+    return item?.quantity ?? 0
+  }, [items])
+
+  // Calculate totals
+  const cart = useMemo<Cart>(() => {
+    const subtotal = items.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    )
+
+    // Free shipping above threshold
+    const shippingFee = subtotal >= config.freeShippingThreshold ? 0 : config.standardShippingFee
+
+    return {
+      items,
+      subtotal,
+      shippingFee,
+      total: subtotal + shippingFee,
+    }
+  }, [items])
+
+  // Total item count
+  const itemCount = useMemo(() =>
+    items.reduce((sum, item) => sum + item.quantity, 0),
+    [items]
   )
 
-  const itemCount = items.reduce((sum, item) => sum + item.quantity, 0)
-
   return {
+    cart,
     items,
-    isOpen,
-    setIsOpen,
-    addItem,
-    removeItem,
-    updateQuantity,
-    clearCart,
-    total,
     itemCount,
+    isEmpty: items.length === 0,
+    addItem,
+    updateQuantity,
+    removeItem,
+    clearCart,
+    getItemQuantity,
   }
 }

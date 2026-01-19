@@ -1,0 +1,104 @@
+{
+  "name": "CBL-Popshop-05-Admin-Stats",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "popshop/admin/stats",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "popshop-admin-stats",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L7j6V9fwqAW2mVNn",
+          "name": "Cryptico Admin Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  COUNT(*) as total_orders,\n  COUNT(*) FILTER (WHERE status = 'pending') as pending_orders,\n  COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed_orders,\n  COUNT(*) FILTER (WHERE status = 'processing') as processing_orders,\n  COUNT(*) FILTER (WHERE status = 'shipped') as shipped_orders,\n  COUNT(*) FILTER (WHERE status = 'delivered') as delivered_orders,\n  COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_orders,\n  COUNT(*) FILTER (WHERE status = 'refunded') as refunded_orders,\n  COALESCE(SUM(total) FILTER (WHERE status NOT IN ('cancelled', 'refunded')), 0) as total_revenue,\n  COALESCE(SUM(total) FILTER (WHERE status = 'delivered'), 0) as completed_revenue,\n  COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours') as orders_24h,\n  COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') as orders_7d,\n  COALESCE(SUM(total) FILTER (WHERE status NOT IN ('cancelled', 'refunded') AND created_at >= NOW() - INTERVAL '24 hours'), 0) as revenue_24h,\n  COALESCE(SUM(total) FILTER (WHERE status NOT IN ('cancelled', 'refunded') AND created_at >= NOW() - INTERVAL '7 days'), 0) as revenue_7d\nFROM popshop_orders;",
+        "options": {}
+      },
+      "id": "fetch-stats",
+      "name": "Fetch Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 300],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT 'N/A' as product_id, 'Items stored as JSON' as product_name, 'N/A' as size, 0 as total_sold, 0 as total_revenue LIMIT 0;",
+        "options": {}
+      },
+      "id": "top-products",
+      "name": "Top Products",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [700, 300],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const stats = $('Fetch Stats').first().json[0] || {};\nconst topProducts = $('Top Products').all().map(item => item.json);\n\nreturn [{\n  json: {\n    success: true,\n    stats: {\n      orders: {\n        total: parseInt(stats.total_orders) || 0,\n        pending: parseInt(stats.pending_orders) || 0,\n        confirmed: parseInt(stats.confirmed_orders) || 0,\n        processing: parseInt(stats.processing_orders) || 0,\n        shipped: parseInt(stats.shipped_orders) || 0,\n        delivered: parseInt(stats.delivered_orders) || 0,\n        cancelled: parseInt(stats.cancelled_orders) || 0,\n        refunded: parseInt(stats.refunded_orders) || 0\n      },\n      revenue: {\n        total: parseFloat(stats.total_revenue) || 0,\n        completed: parseFloat(stats.completed_revenue) || 0\n      },\n      recent: {\n        orders_24h: parseInt(stats.orders_24h) || 0,\n        orders_7d: parseInt(stats.orders_7d) || 0,\n        revenue_24h: parseFloat(stats.revenue_24h) || 0,\n        revenue_7d: parseFloat(stats.revenue_7d) || 0\n      },\n      top_products: topProducts\n    },\n    generated_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1140, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Fetch Stats", "type": "main", "index": 0 }]]
+    },
+    "Fetch Stats": {
+      "main": [[{ "node": "Top Products", "type": "main", "index": 0 }]]
+    },
+    "Top Products": {
+      "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]]
+    },
+    "Format Response": {
+      "main": [[{ "node": "Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

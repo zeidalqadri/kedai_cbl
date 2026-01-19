@@ -1,0 +1,212 @@
+{
+  "name": "CBL-Popshop-01-Order-Submit",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "popshop/order/submit",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": { "rawBody": false }
+      },
+      "id": "01-trigger-webhook",
+      "name": "01-trigger-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "popshop-order-submit",
+      "credentials": { "httpHeaderAuth": { "id": "B9IPRA0h6bahkCwZ", "name": "Cryptico API Key" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json.body || $input.first().json;\nconst errors = [];\n\n// Validate items array\nif (!input.items || !Array.isArray(input.items) || input.items.length === 0) {\n  errors.push('items array is required and must not be empty');\n} else {\n  input.items.forEach((item, index) => {\n    if (!item.productId) errors.push(`items[${index}].productId is required`);\n    if (!item.productName) errors.push(`items[${index}].productName is required`);\n    if (!item.size) errors.push(`items[${index}].size is required`);\n    if (!item.quantity || item.quantity < 1) errors.push(`items[${index}].quantity must be at least 1`);\n    if (!item.price || item.price <= 0) errors.push(`items[${index}].price must be positive`);\n  });\n}\n\n// Validate totals\nif (!input.subtotal || input.subtotal <= 0) errors.push('subtotal must be positive');\nif (input.shippingFee === undefined) errors.push('shippingFee is required');\nif (!input.total || input.total <= 0) errors.push('total must be positive');\n\n// Validate customer\nif (!input.customer) {\n  errors.push('customer object is required');\n} else {\n  if (!input.customer.name || input.customer.name.length < 2) errors.push('customer.name must be at least 2 characters');\n  if (!input.customer.phone) errors.push('customer.phone is required');\n  if (!input.customer.email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(input.customer.email)) errors.push('customer.email must be valid');\n  if (!input.customer.address) {\n    errors.push('customer.address is required');\n  } else {\n    if (!input.customer.address.line1) errors.push('customer.address.line1 is required');\n    if (!input.customer.address.city) errors.push('customer.address.city is required');\n    if (!input.customer.address.state) errors.push('customer.address.state is required');\n    if (!input.customer.address.postcode || !/^\\d{5}$/.test(input.customer.address.postcode)) errors.push('customer.address.postcode must be 5 digits');\n  }\n}\n\nreturn [{ json: { ...input, isValid: errors.length === 0, validationErrors: errors, receivedAt: new Date().toISOString() } }];"
+      },
+      "id": "05-validate-input",
+      "name": "05-validate-input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "valid-check", "leftValue": "={{ $json.isValid }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "06-validation-gate",
+      "name": "06-validation-gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\n\n// Generate order ID: CBL-<timestamp><random>\nconst orderId = 'PS' + Date.now().toString(36).toUpperCase().substring(0, 6) + Math.random().toString(36).substring(2, 4).toUpperCase();\nconst idempotencyKey = input.idempotencyKey || (orderId + '-' + Date.now());\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  order: {\n    id: orderId,\n    idempotency_key: idempotencyKey,\n    items: JSON.stringify(input.items),\n    subtotal: input.subtotal,\n    shipping_fee: input.shippingFee,\n    total: input.total,\n    customer_name: input.customer.name,\n    customer_phone: input.customer.phone,\n    customer_email: input.customer.email,\n    shipping_address: JSON.stringify(input.customer.address),\n    payment_ref: input.paymentRef || null,\n    has_proof_image: !!input.proofImageBase64,\n    status: 'pending',\n    created_at: now,\n    updated_at: now\n  },\n  input: input,\n  proofImageBase64: input.proofImageBase64 || null\n} }];"
+      },
+      "id": "20-generate-order",
+      "name": "20-generate-order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO popshop_orders (order_id, idempotency_key, items, subtotal, shipping_fee, total, customer_name, customer_phone, customer_email, shipping_address, payment_ref, has_proof_image, status, created_at, updated_at) VALUES ('{{ $json.order.id }}', '{{ $json.order.idempotency_key }}', '{{ $json.order.items }}', {{ $json.order.subtotal }}, {{ $json.order.shipping_fee }}, {{ $json.order.total }}, '{{ $json.order.customer_name }}', '{{ $json.order.customer_phone }}', '{{ $json.order.customer_email }}', '{{ $json.order.shipping_address }}', {{ $json.order.payment_ref ? \"'\" + $json.order.payment_ref + \"'\" : 'NULL' }}, {{ $json.order.has_proof_image }}, '{{ $json.order.status }}', '{{ $json.order.created_at }}', '{{ $json.order.updated_at }}') RETURNING *",
+        "options": {}
+      },
+      "id": "25-insert-order",
+      "name": "25-insert-order",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 200],
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const orderData = $('20-generate-order').first().json;\nconst order = orderData.order;\nconst items = orderData.input.items;\nconst proofImageBase64 = orderData.proofImageBase64;\n\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\n\n// Build items list\nlet itemsList = items.map(item => `  • ${item.productName} (${item.size}) x${item.quantity} - ${formatMYR(item.price * item.quantity)}`).join('\\n');\n\nconst address = orderData.input.customer.address;\nconst addressStr = `${address.line1}${address.line2 ? ', ' + address.line2 : ''}, ${address.postcode} ${address.city}, ${address.state}`;\n\nconst message = `🏀 <b>NEW CBL POPSHOP ORDER</b>\\n\\n📋 <b>Order ID:</b> <code>${order.id}</code>\\n\\n🛒 <b>Items:</b>\\n${itemsList}\\n\\n💰 <b>Subtotal:</b> ${formatMYR(order.subtotal)}\\n🚚 <b>Shipping:</b> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}\\n💵 <b>Total:</b> ${formatMYR(order.total)}\\n\\n👤 <b>Customer:</b>\\n├ Name: ${order.customer_name}\\n├ Phone: ${order.customer_phone}\\n├ Email: ${order.customer_email}\\n└ Address: ${addressStr}\\n\\n💳 <b>Payment Ref:</b> ${order.payment_ref || '(see attached screenshot)'}\\n📷 <b>Proof Image:</b> ${order.has_proof_image ? '✅ Attached below' : '❌ None'}\\n📅 <b>Time:</b> ${new Date(order.created_at).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}\\n\\n⏳ <b>Status:</b> Awaiting payment verification`;\n\nconst inlineKeyboard = {\n  inline_keyboard: [\n    [\n      { text: '✅ Verify Payment', callback_data: `popshop_paid_${order.id}` },\n      { text: '❌ Cancel', callback_data: `popshop_cancel_${order.id}` }\n    ]\n  ]\n};\n\nreturn [{ json: { order: order, telegramMessage: message, inlineKeyboard: inlineKeyboard, proofImageBase64: proofImageBase64 } }];"
+      },
+      "id": "30-format-telegram",
+      "name": "30-format-telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "has-proof", "leftValue": "={{ $json.proofImageBase64 }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "31-check-proof-image",
+      "name": "31-check-proof-image",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1580, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json;\nconst base64 = data.proofImageBase64;\n\nlet imageData = base64;\nif (base64.includes(',')) {\n  imageData = base64.split(',')[1];\n}\n\nconst binaryData = Buffer.from(imageData, 'base64');\n\nreturn [{\n  json: data,\n  binary: {\n    data: {\n      data: binaryData.toString('base64'),\n      mimeType: 'image/png',\n      fileName: `proof_${data.order.id}.png`\n    }\n  }\n}];"
+      },
+      "id": "32-prepare-image",
+      "name": "32-prepare-image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.POPSHOP_TELEGRAM_BOT_TOKEN }}/sendPhoto",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "chat_id", "value": "={{ $env.POPSHOP_TELEGRAM_CHAT_ID }}" },
+            { "name": "caption", "value": "=📷 Payment proof for Order <code>{{ $json.order.id }}</code>", "parameterType": "formData" },
+            { "name": "parse_mode", "value": "HTML" },
+            { "name": "photo", "parameterType": "formBinaryData", "inputDataFieldName": "data" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "33-send-proof-image",
+      "name": "33-send-proof-image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2020, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.POPSHOP_TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.POPSHOP_TELEGRAM_CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($('30-format-telegram').first().json.telegramMessage) }},\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {{ JSON.stringify($('30-format-telegram').first().json.inlineKeyboard) }}\n}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "35-send-telegram-with-buttons",
+      "name": "35-send-telegram-with-buttons",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2240, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.POPSHOP_TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.POPSHOP_TELEGRAM_CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($json.telegramMessage) }},\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {{ JSON.stringify($json.inlineKeyboard) }}\n}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "35-send-telegram-no-image",
+      "name": "35-send-telegram-no-image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const order = $('30-format-telegram').first().json.order;\n\nreturn [{ json: {\n  ok: true,\n  orderId: order.id,\n  status: 'pending',\n  total: order.total,\n  estimatedDelivery: '3-5 business days after payment verification',\n  message: `Order ${order.id} submitted successfully. You will receive updates via email.`,\n  trackingUrl: `/popshop/order/lookup?id=${order.id}`\n} }];"
+      },
+      "id": "55-format-response",
+      "name": "55-format-response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2460, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": { "responseCode": 201, "responseHeaders": { "entries": [{ "name": "Content-Type", "value": "application/json" }] } }
+      },
+      "id": "60-reply-success",
+      "name": "60-reply-success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2680, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": false,\n  \"error_code\": \"VALIDATION_ERROR\",\n  \"message\": \"Request validation failed\",\n  \"errors\": {{ JSON.stringify($json.validationErrors) }}\n}",
+        "options": { "responseCode": 400 }
+      },
+      "id": "99-reply-validation-error",
+      "name": "99-reply-validation-error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 400]
+    }
+  ],
+  "connections": {
+    "01-trigger-webhook": { "main": [[ { "node": "05-validate-input", "type": "main", "index": 0 } ]] },
+    "05-validate-input": { "main": [[ { "node": "06-validation-gate", "type": "main", "index": 0 } ]] },
+    "06-validation-gate": { "main": [[ { "node": "20-generate-order", "type": "main", "index": 0 } ], [ { "node": "99-reply-validation-error", "type": "main", "index": 0 } ]] },
+    "20-generate-order": { "main": [[ { "node": "25-insert-order", "type": "main", "index": 0 } ]] },
+    "25-insert-order": { "main": [[ { "node": "30-format-telegram", "type": "main", "index": 0 } ]] },
+    "30-format-telegram": { "main": [[ { "node": "31-check-proof-image", "type": "main", "index": 0 } ]] },
+    "31-check-proof-image": { "main": [[ { "node": "32-prepare-image", "type": "main", "index": 0 } ], [ { "node": "35-send-telegram-no-image", "type": "main", "index": 0 } ]] },
+    "32-prepare-image": { "main": [[ { "node": "33-send-proof-image", "type": "main", "index": 0 } ]] },
+    "33-send-proof-image": { "main": [[ { "node": "35-send-telegram-with-buttons", "type": "main", "index": 0 } ]] },
+    "35-send-telegram-with-buttons": { "main": [[ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
+    "35-send-telegram-no-image": { "main": [[ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
+    "55-format-response": { "main": [[ { "node": "60-reply-success", "type": "main", "index": 0 } ]] }
+  },
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "tags": [{ "name": "cbl-popshop" }, { "name": "order-submit" }]
+}

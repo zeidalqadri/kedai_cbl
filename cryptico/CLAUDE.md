@@ -269,7 +269,7 @@ The Telegram bot is configured to send inline Approve/Reject buttons for order v
 
 | Setting | Value |
 |---------|-------|
-| Bot Token | `TELEGRAM_BOT_TOKEN_REDACTED` |
+| Bot Token | `8282150332:AAHabYbhdBA322yYXKt3uKC6cv7VVzFOmGI` |
 | Webhook URL | `https://alumist.alumga.com/webhook/cryptico/telegram-callback` |
 
 **Webhook Setup Command:**

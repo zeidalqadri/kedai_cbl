@@ -1,0 +1,117 @@
+{
+  "name": "CBL-Popshop-04-Admin-Orders",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "popshop/admin/orders",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "popshop-admin-orders",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L7j6V9fwqAW2mVNn",
+          "name": "Cryptico Admin Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.first().json.query || {};\n\n// Parse query parameters\nconst status = query.status || null;\nconst page = parseInt(query.page) || 1;\nconst limit = Math.min(parseInt(query.limit) || 20, 100);\nconst offset = (page - 1) * limit;\nconst sortBy = query.sort_by || 'created_at';\nconst sortOrder = (query.sort_order || 'desc').toUpperCase();\n\n// Validate sort params\nconst validSortFields = ['created_at', 'updated_at', 'total', 'order_id'];\nconst validSortOrders = ['ASC', 'DESC'];\n\nconst safeSortBy = validSortFields.includes(sortBy) ? sortBy : 'created_at';\nconst safeSortOrder = validSortOrders.includes(sortOrder) ? sortOrder : 'DESC';\n\nreturn [{\n  json: {\n    status,\n    page,\n    limit,\n    offset,\n    sortBy: safeSortBy,\n    sortOrder: safeSortOrder\n  }\n}];"
+      },
+      "id": "parse-params",
+      "name": "Parse Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM popshop_orders {{ $json.status ? \"WHERE status = '\" + $json.status + \"'\" : '' }} ORDER BY {{ $json.sortBy }} {{ $json.sortOrder }} LIMIT {{ $json.limit }} OFFSET {{ $json.offset }};",
+        "options": {}
+      },
+      "id": "fetch-orders",
+      "name": "Fetch Orders",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [700, 300],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as total FROM popshop_orders {{ $('Parse Params').first().json.status ? \"WHERE status = '\" + $('Parse Params').first().json.status + \"'\" : '' }};",
+        "options": {}
+      },
+      "id": "count-orders",
+      "name": "Count Orders",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [920, 300],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const params = $('Parse Params').first().json;\nconst orders = $('Fetch Orders').all().map(item => item.json);\nconst total = parseInt($('Count Orders').first().json[0]?.total || 0);\n\nconst totalPages = Math.ceil(total / params.limit);\n\nreturn [{\n  json: {\n    success: true,\n    orders: orders,\n    pagination: {\n      page: params.page,\n      limit: params.limit,\n      total: total,\n      total_pages: totalPages,\n      has_next: params.page < totalPages,\n      has_prev: params.page > 1\n    },\n    filters: {\n      status: params.status,\n      sort_by: params.sortBy,\n      sort_order: params.sortOrder\n    }\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Parse Params", "type": "main", "index": 0 }]]
+    },
+    "Parse Params": {
+      "main": [[{ "node": "Fetch Orders", "type": "main", "index": 0 }]]
+    },
+    "Fetch Orders": {
+      "main": [[{ "node": "Count Orders", "type": "main", "index": 0 }]]
+    },
+    "Count Orders": {
+      "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]]
+    },
+    "Format Response": {
+      "main": [[{ "node": "Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
