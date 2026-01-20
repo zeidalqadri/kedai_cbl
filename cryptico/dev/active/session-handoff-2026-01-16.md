@@ -11,7 +11,7 @@
 - **wf-02-order-submit**: Updated to send inline Approve ✅ / Reject ❌ buttons
 - **wf-08-telegram-callback**: New workflow to handle button clicks
 - **Webhook configured**: `https://alumist.alumga.com/webhook/cryptico/telegram-callback`
-- **Bot Token**: `8282150332:AAHabYbhdBA322yYXKt3uKC6cv7VVzFOmGI`
+- **Bot Token**: `TELEGRAM_BOT_TOKEN_REDACTED`
 
 ### 2. ProcessingScreen API Polling Fix (Critical Bug)
 - **Problem**: Was polling localStorage instead of API
@@ -138,11 +138,11 @@ curl -s 'https://alumist.alumga.com/webhook/admin/orders?limit=5' \
   -H 'X-Admin-Key: 7749a10b62c81a4c9b8f429b80fc9b797997506345a26ca802857b7049c5165d' | jq
 
 # Set Telegram webhook
-curl -X POST "https://api.telegram.org/bot8282150332:AAHabYbhdBA322yYXKt3uKC6cv7VVzFOmGI/setWebhook" \
+curl -X POST "https://api.telegram.org/botTELEGRAM_BOT_TOKEN_REDACTED/setWebhook" \
   -d "url=https://alumist.alumga.com/webhook/cryptico/telegram-callback"
 
 # Verify webhook
-curl "https://api.telegram.org/bot8282150332:AAHabYbhdBA322yYXKt3uKC6cv7VVzFOmGI/getWebhookInfo"
+curl "https://api.telegram.org/botTELEGRAM_BOT_TOKEN_REDACTED/getWebhookInfo"
 ```
 
 ---

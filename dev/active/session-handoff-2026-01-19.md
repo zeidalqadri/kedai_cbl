@@ -48,7 +48,7 @@ ssh root@45.159.230.42 -p 1511 "sudo -u postgres psql -d cryptico_kiosk -c 'YOUR
 
 ### Telegram Bot
 - Bot: @CBLPopshopBot
-- Token: 8379859949:AAEsnt_VymsW80A5N_rLX2jBD3fpdDCZNx0
+- Token: TELEGRAM_BOT_TOKEN_REDACTED
 - Chat ID: 5426763403
 - n8n env vars needed:
   - POPSHOP_TELEGRAM_BOT_TOKEN
