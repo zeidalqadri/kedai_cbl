@@ -1,0 +1,262 @@
+{
+  "name": "PopShop-06-Telegram-Callback",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "popshop/telegram-callback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "01-trigger-webhook",
+      "name": "01-trigger-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "popshop-telegram-callback"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\nconst callbackQuery = body.callback_query;\n\nif (!callbackQuery) {\n  return [{ json: { isValid: false, error: 'No callback_query in request' } }];\n}\n\nconst callbackId = callbackQuery.id;\nconst chatId = callbackQuery.message?.chat?.id;\nconst messageId = callbackQuery.message?.message_id;\nconst callbackData = callbackQuery.data;\nconst fromUser = callbackQuery.from;\n\n// Parse callback_data: format is \"popshop_action_orderId\" (e.g., \"popshop_paid_PSMKXYZ123\")\nconst parts = callbackData.split('_');\n\n// Handle format: popshop_paid_ORDERID or popshop_cancel_ORDERID\nlet action, orderId;\nif (parts[0] === 'popshop' && parts.length >= 3) {\n  action = parts[1]; // 'paid' or 'cancel'\n  orderId = parts.slice(2).join('_'); // In case order ID has underscores\n} else if (parts.length === 2) {\n  // Legacy format: action_orderId\n  action = parts[0];\n  orderId = parts[1];\n} else {\n  return [{ json: { isValid: false, error: 'Invalid callback_data format', callbackId } }];\n}\n\nif (!action || !orderId) {\n  return [{ json: { isValid: false, error: 'Invalid callback_data format', callbackId } }];\n}\n\n// Map PopShop actions to standard actions\nconst ACTION_MAP = { 'paid': 'approve', 'cancel': 'reject', 'approve': 'approve', 'reject': 'reject' };\nconst mappedAction = ACTION_MAP[action];\n\nif (!mappedAction) {\n  return [{ json: { isValid: false, error: `Invalid action: ${action}`, callbackId } }];\n}\n\nreturn [{ json: {\n  isValid: true,\n  callbackId,\n  chatId,\n  messageId,\n  action: mappedAction,\n  orderId,\n  fromUser: fromUser.username || fromUser.first_name || 'Admin'\n} }];"
+      },
+      "id": "05-parse-callback",
+      "name": "05-parse-callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "valid-check", "leftValue": "={{ $json.isValid }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "06-validation-gate",
+      "name": "06-validation-gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT * FROM popshop_orders WHERE order_id = '{{ $json.orderId }}' LIMIT 1",
+        "options": {}
+      },
+      "id": "10-fetch-order",
+      "name": "10-fetch-order",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [920, 200],
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "exists-check", "leftValue": "={{ $json.order_id }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "11-order-exists",
+      "name": "11-order-exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1140, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const order = $input.first().json;\nconst callbackInfo = $('05-parse-callback').first().json;\nconst action = callbackInfo.action;\n\n// PopShop status transitions\nconst VALID_TRANSITIONS = {\n  'pending': ['approve', 'reject'],\n  'confirmed': [],\n  'processing': [],\n  'shipped': [],\n  'delivered': [],\n  'cancelled': [],\n  'refunded': []\n};\n\nconst currentStatus = order.status;\nconst allowedActions = VALID_TRANSITIONS[currentStatus] || [];\n\nif (!allowedActions.includes(action)) {\n  return [{ json: {\n    ...callbackInfo,\n    order,\n    canTransition: false,\n    error: currentStatus === 'pending' ? `Cannot ${action} this order` : `Order already ${currentStatus}`\n  } }];\n}\n\n// Map actions to new statuses\nconst STATUS_MAP = { 'approve': 'confirmed', 'reject': 'cancelled' };\n\nreturn [{ json: {\n  ...callbackInfo,\n  order,\n  canTransition: true,\n  newStatus: STATUS_MAP[action],\n  previousStatus: currentStatus\n} }];"
+      },
+      "id": "15-validate-transition",
+      "name": "15-validate-transition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "can-transition-check", "leftValue": "={{ $json.canTransition }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "16-transition-gate",
+      "name": "16-transition-gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1580, 100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE popshop_orders SET status = '{{ $json.newStatus }}', admin_notes = 'Updated via Telegram by {{ $json.fromUser }}', updated_at = NOW() WHERE order_id = '{{ $json.orderId }}' RETURNING *",
+        "options": {}
+      },
+      "id": "20-update-order",
+      "name": "20-update-order",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1800, 0],
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO popshop_audit_log (entity_type, entity_id, action, old_value, new_value, details, created_at) VALUES ('order', '{{ $('15-validate-transition').first().json.orderId }}', 'status_change', '{{ $('15-validate-transition').first().json.previousStatus }}', '{{ $('15-validate-transition').first().json.newStatus }}', '{{ JSON.stringify({ via: 'telegram', user: $('15-validate-transition').first().json.fromUser }) }}', NOW())",
+        "options": {}
+      },
+      "id": "25-audit-log",
+      "name": "25-audit-log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2020, 0],
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const info = $('15-validate-transition').first().json;\nconst order = info.order;\n\nconst STATUS_EMOJI = { 'confirmed': '✅', 'cancelled': '❌' };\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\n\n// Parse items\nlet items = order.items;\nif (typeof items === 'string') items = JSON.parse(items);\nconst itemList = items.map(i => `• ${i.productName} (${i.size}) x${i.quantity}`).join('\\n');\n\n// Updated message to replace the original (no buttons anymore)\nconst updatedMessage = `${STATUS_EMOJI[info.newStatus]} <b>ORDER ${info.newStatus.toUpperCase()}</b>\\n\\n📋 <b>Order ID:</b> <code>${order.order_id}</code>\\n\\n🛍️ <b>Items:</b>\\n${itemList}\\n\\n💰 <b>Total:</b> ${formatMYR(order.total)}\\n\\n👤 <b>Customer:</b> ${order.customer_name}\\n📱 <b>Phone:</b> ${order.customer_phone}\\n📧 <b>Email:</b> ${order.customer_email}\\n\\n👨‍💼 <b>Processed by:</b> @${info.fromUser}\\n🕐 <b>Updated:</b> ${new Date().toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}`;\n\nreturn [{ json: { ...info, updatedMessage } }];"
+      },
+      "id": "30-format-updated-message",
+      "name": "30-format-updated-message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.POPSHOP_TELEGRAM_BOT_TOKEN }}/answerCallbackQuery",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"callback_query_id\": \"{{ $json.callbackId }}\",\n  \"text\": \"Order {{ $json.orderId }} {{ $json.newStatus }}!\",\n  \"show_alert\": false\n}",
+        "options": { "timeout": 5000 }
+      },
+      "id": "35-answer-callback",
+      "name": "35-answer-callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2460, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.POPSHOP_TELEGRAM_BOT_TOKEN }}/editMessageText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('30-format-updated-message').first().json.chatId }}\",\n  \"message_id\": {{ $('30-format-updated-message').first().json.messageId }},\n  \"text\": {{ JSON.stringify($('30-format-updated-message').first().json.updatedMessage) }},\n  \"parse_mode\": \"HTML\"\n}",
+        "options": { "timeout": 5000 }
+      },
+      "id": "40-edit-original-message",
+      "name": "40-edit-original-message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2680, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"ok\": true }",
+        "options": { "responseCode": 200 }
+      },
+      "id": "50-reply-success",
+      "name": "50-reply-success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2900, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.POPSHOP_TELEGRAM_BOT_TOKEN }}/answerCallbackQuery",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"callback_query_id\": \"{{ $json.callbackId }}\",\n  \"text\": \"{{ $json.error || 'Cannot process this action' }}\",\n  \"show_alert\": true\n}",
+        "options": { "timeout": 5000 }
+      },
+      "id": "99-answer-error-callback",
+      "name": "99-answer-error-callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"ok\": true }",
+        "options": { "responseCode": 200 }
+      },
+      "id": "99-reply-error",
+      "name": "99-reply-error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2020, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.POPSHOP_TELEGRAM_BOT_TOKEN }}/answerCallbackQuery",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"callback_query_id\": \"{{ $('05-parse-callback').first().json.callbackId }}\",\n  \"text\": \"Order not found\",\n  \"show_alert\": true\n}",
+        "options": { "timeout": 5000 }
+      },
+      "id": "99-answer-not-found",
+      "name": "99-answer-not-found",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"ok\": true }",
+        "options": { "responseCode": 200 }
+      },
+      "id": "99-reply-not-found",
+      "name": "99-reply-not-found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1580, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"ok\": true }",
+        "options": { "responseCode": 200 }
+      },
+      "id": "99-reply-invalid",
+      "name": "99-reply-invalid",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 400]
+    }
+  ],
+  "connections": {
+    "01-trigger-webhook": { "main": [[ { "node": "05-parse-callback", "type": "main", "index": 0 } ]] },
+    "05-parse-callback": { "main": [[ { "node": "06-validation-gate", "type": "main", "index": 0 } ]] },
+    "06-validation-gate": { "main": [[ { "node": "10-fetch-order", "type": "main", "index": 0 } ], [ { "node": "99-reply-invalid", "type": "main", "index": 0 } ]] },
+    "10-fetch-order": { "main": [[ { "node": "11-order-exists", "type": "main", "index": 0 } ]] },
+    "11-order-exists": { "main": [[ { "node": "15-validate-transition", "type": "main", "index": 0 } ], [ { "node": "99-answer-not-found", "type": "main", "index": 0 } ]] },
+    "99-answer-not-found": { "main": [[ { "node": "99-reply-not-found", "type": "main", "index": 0 } ]] },
+    "15-validate-transition": { "main": [[ { "node": "16-transition-gate", "type": "main", "index": 0 } ]] },
+    "16-transition-gate": { "main": [[ { "node": "20-update-order", "type": "main", "index": 0 } ], [ { "node": "99-answer-error-callback", "type": "main", "index": 0 } ]] },
+    "99-answer-error-callback": { "main": [[ { "node": "99-reply-error", "type": "main", "index": 0 } ]] },
+    "20-update-order": { "main": [[ { "node": "25-audit-log", "type": "main", "index": 0 } ]] },
+    "25-audit-log": { "main": [[ { "node": "30-format-updated-message", "type": "main", "index": 0 } ]] },
+    "30-format-updated-message": { "main": [[ { "node": "35-answer-callback", "type": "main", "index": 0 } ]] },
+    "35-answer-callback": { "main": [[ { "node": "40-edit-original-message", "type": "main", "index": 0 } ]] },
+    "40-edit-original-message": { "main": [[ { "node": "50-reply-success", "type": "main", "index": 0 } ]] }
+  },
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "tags": []
+}
