@@ -66,7 +66,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [1140, 200],
-      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -125,7 +126,8 @@
       "name": "33-send-proof-image",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2020, 100]
+      "position": [2020, 100],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -140,7 +142,8 @@
       "name": "35-send-telegram-with-buttons",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2240, 100]
+      "position": [2240, 100],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -155,7 +158,8 @@
       "name": "35-send-telegram-no-image",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1800, 300]
+      "position": [1800, 300],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -191,6 +195,18 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [920, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": false,\n  \"error_code\": \"DATABASE_ERROR\",\n  \"message\": \"Failed to save order. Please try again.\"\n}",
+        "options": { "responseCode": 500 }
+      },
+      "id": "99-reply-database-error",
+      "name": "99-reply-database-error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 400]
     }
   ],
   "connections": {
@@ -198,7 +214,7 @@
     "05-validate-input": { "main": [[ { "node": "06-validation-gate", "type": "main", "index": 0 } ]] },
     "06-validation-gate": { "main": [[ { "node": "20-generate-order", "type": "main", "index": 0 } ], [ { "node": "99-reply-validation-error", "type": "main", "index": 0 } ]] },
     "20-generate-order": { "main": [[ { "node": "25-insert-order", "type": "main", "index": 0 } ]] },
-    "25-insert-order": { "main": [[ { "node": "30-format-telegram", "type": "main", "index": 0 } ]] },
+    "25-insert-order": { "main": [[ { "node": "30-format-telegram", "type": "main", "index": 0 } ], [ { "node": "99-reply-database-error", "type": "main", "index": 0 } ]] },
     "30-format-telegram": { "main": [[ { "node": "31-check-proof-image", "type": "main", "index": 0 } ]] },
     "31-check-proof-image": { "main": [[ { "node": "32-prepare-image", "type": "main", "index": 0 } ], [ { "node": "35-send-telegram-no-image", "type": "main", "index": 0 } ]] },
     "32-prepare-image": { "main": [[ { "node": "33-send-proof-image", "type": "main", "index": 0 } ]] },

@@ -78,3 +78,7 @@ export function truncate(text: string, maxLength: number): string {
 // Class name combiner (re-exported from ui-primitives for convenience)
 export const cx = (...classes: (string | boolean | undefined | null)[]): string =>
   classes.filter(Boolean).join(' ')
+
+// Aliases for backwards compatibility with old components
+export const cn = cx
+export const formatPrice = formatMYR

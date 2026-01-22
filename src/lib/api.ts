@@ -45,7 +45,41 @@ async function publicFetch<T>(
       headers,
     })
 
-    const data = await response.json() as N8nApiResponse
+    // Check for empty or non-OK response
+    if (!response.ok) {
+      const text = await response.text()
+      let errorData: N8nApiResponse = {}
+      try {
+        errorData = text ? JSON.parse(text) : {}
+      } catch {
+        // Response wasn't valid JSON
+      }
+      return {
+        success: false,
+        error: errorData.error || errorData.message || `Server error (${response.status})`,
+        errorCode: errorData.error_code || errorData.code || String(response.status),
+      }
+    }
+
+    const text = await response.text()
+    if (!text) {
+      return {
+        success: false,
+        error: 'Server returned empty response. Please try again.',
+        errorCode: 'EMPTY_RESPONSE',
+      }
+    }
+
+    let data: N8nApiResponse
+    try {
+      data = JSON.parse(text)
+    } catch {
+      return {
+        success: false,
+        error: 'Invalid server response. Please try again.',
+        errorCode: 'INVALID_JSON',
+      }
+    }
 
     // n8n workflows use 'success' field
     if (!data.success && !data.ok) {
@@ -84,7 +118,41 @@ async function adminFetch<T>(
       headers,
     })
 
-    const data = await response.json() as N8nApiResponse
+    // Check for empty or non-OK response
+    if (!response.ok) {
+      const text = await response.text()
+      let errorData: N8nApiResponse = {}
+      try {
+        errorData = text ? JSON.parse(text) : {}
+      } catch {
+        // Response wasn't valid JSON
+      }
+      return {
+        success: false,
+        error: errorData.error || errorData.message || `Server error (${response.status})`,
+        errorCode: errorData.error_code || errorData.code || String(response.status),
+      }
+    }
+
+    const text = await response.text()
+    if (!text) {
+      return {
+        success: false,
+        error: 'Server returned empty response. Please try again.',
+        errorCode: 'EMPTY_RESPONSE',
+      }
+    }
+
+    let data: N8nApiResponse
+    try {
+      data = JSON.parse(text)
+    } catch {
+      return {
+        success: false,
+        error: 'Invalid server response. Please try again.',
+        errorCode: 'INVALID_JSON',
+      }
+    }
 
     // n8n workflows use 'success' field
     if (!data.success && !data.ok) {
