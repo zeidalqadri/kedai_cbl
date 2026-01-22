@@ -263,6 +263,36 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [1580, 400]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Get order data from format-notifications node\nconst notificationData = $('30-format-notifications').first().json;\nconst order = notificationData.order;\nconst items = $('20-generate-order').first().json.input.items;\nconst proofImageBase64 = notificationData.proofImageBase64;\nconst config = notificationData._config;\n\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\n\n// Parse shipping address\nconst address = JSON.parse(order.shipping_address);\nconst addressStr = `${address.line1}${address.line2 ? ', ' + address.line2 : ''}<br>${address.postcode} ${address.city}, ${address.state}`;\n\n// Build items table rows\nlet itemRows = items.map(item => \n  `<tr><td style=\"padding: 8px 0; border-bottom: 1px solid #e5e7eb;\">${item.productName} (${item.size}) x${item.quantity}</td><td style=\"padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;\">${formatMYR(item.price * item.quantity)}</td></tr>`\n).join('');\n\nconst customerEmailHtml = `<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n  <h1 style=\"color: #f97316;\">🏀 CBL Popshop</h1>\n  <p>Hi ${order.customer_name},</p>\n  <p>Thank you for your order!</p>\n\n  <div style=\"background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;\">\n    <p style=\"margin: 0; font-size: 14px; color: #666;\">Order ID</p>\n    <p style=\"margin: 4px 0 0 0; font-size: 24px; font-weight: bold; font-family: monospace;\">${order.id}</p>\n  </div>\n\n  <h3 style=\"margin-top: 24px;\">Order Details</h3>\n  <table style=\"width: 100%; border-collapse: collapse;\">\n    ${itemRows}\n  </table>\n  <div style=\"margin-top: 16px;\">\n    <p style=\"margin: 4px 0;\"><strong>Subtotal:</strong> ${formatMYR(order.subtotal)}</p>\n    <p style=\"margin: 4px 0;\"><strong>Shipping:</strong> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}</p>\n    <p style=\"margin: 4px 0; font-size: 18px;\"><strong>Total:</strong> ${formatMYR(order.total)}</p>\n  </div>\n\n  <h3 style=\"margin-top: 24px;\">Shipping To</h3>\n  <p>${addressStr}</p>\n\n  <h3 style=\"margin-top: 24px;\">What's Next?</h3>\n  <ol style=\"padding-left: 20px;\">\n    <li style=\"margin-bottom: 8px;\">We'll verify your payment</li>\n    <li style=\"margin-bottom: 8px;\">Your order will be processed</li>\n    <li style=\"margin-bottom: 8px;\">You'll receive tracking info when shipped</li>\n  </ol>\n\n  <p style=\"margin-top: 24px;\"><a href=\"https://cbl-popshop.pages.dev/lookup?id=${order.id}\" style=\"display: inline-block; background: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;\">Track Your Order</a></p>\n\n  <hr style=\"margin: 24px 0; border: none; border-top: 1px solid #e5e7eb;\">\n  <p style=\"color: #666; font-size: 12px;\">Questions? Contact us at @cblpopshop on Telegram</p>\n</div>`;\n\nconst customerEmailSubject = `🏀 Order ${order.id} Confirmed - CBL Popshop`;\n\n// Prepare output with or without image binary\nlet output = {\n  json: {\n    _config: config,\n    order: order,\n    customerEmail: order.customer_email,\n    customerEmailSubject,\n    customerEmailHtml,\n    hasProofImage: !!proofImageBase64\n  }\n};\n\n// If we have proof image, include it as binary for attachment\nif (proofImageBase64) {\n  let imageData = proofImageBase64;\n  if (proofImageBase64.includes(',')) {\n    imageData = proofImageBase64.split(',')[1];\n  }\n  output.binary = {\n    proofImage: {\n      data: imageData,\n      mimeType: 'image/png',\n      fileName: `payment_proof_${order.id}.png`\n    }\n  };\n}\n\nreturn [output];"
+      },
+      "id": "40-format-customer-email",
+      "name": "40-format-customer-email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3340, 0]
+    },
+    {
+      "parameters": {
+        "fromEmail": "zeidalqadri@gmail.com",
+        "toEmail": "={{ $json.customerEmail }}",
+        "subject": "={{ $json.customerEmailSubject }}",
+        "emailType": "html",
+        "html": "={{ $json.customerEmailHtml }}",
+        "options": {
+          "attachments": "={{ $json.hasProofImage ? 'proofImage' : '' }}"
+        }
+      },
+      "id": "41-send-customer-email",
+      "name": "41-send-customer-email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [3560, 0],
+      "credentials": { "smtp": { "id": "hCZX1kGIsQ2X1cVZ", "name": "Gmail SMTP" } },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -279,8 +309,10 @@
     "35-send-telegram-with-buttons": { "main": [[ { "node": "36-check-telegram-result", "type": "main", "index": 0 } ]] },
     "35-send-telegram-no-image": { "main": [[ { "node": "36-check-telegram-result", "type": "main", "index": 0 } ]] },
     "36-check-telegram-result": { "main": [[ { "node": "37-telegram-failed?", "type": "main", "index": 0 } ]] },
-    "37-telegram-failed?": { "main": [[ { "node": "38-send-email-fallback", "type": "main", "index": 0 } ], [ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
-    "38-send-email-fallback": { "main": [[ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
+    "37-telegram-failed?": { "main": [[ { "node": "38-send-email-fallback", "type": "main", "index": 0 } ], [ { "node": "40-format-customer-email", "type": "main", "index": 0 } ]] },
+    "38-send-email-fallback": { "main": [[ { "node": "40-format-customer-email", "type": "main", "index": 0 } ]] },
+    "40-format-customer-email": { "main": [[ { "node": "41-send-customer-email", "type": "main", "index": 0 } ]] },
+    "41-send-customer-email": { "main": [[ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
     "55-format-response": { "main": [[ { "node": "60-reply-success", "type": "main", "index": 0 } ]] }
   },
   "settings": { "executionOrder": "v1", "saveExecutionProgress": true },

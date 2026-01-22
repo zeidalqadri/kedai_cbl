@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { ShopScreen, Customer, Order, OrderItem } from '../types'
 import { orderApi } from '../lib/api'
 import { getProductById } from '../lib/constants'
+import { saveSession, loadSession, clearSession } from '../lib/session'
 import { useCart } from './useCart'
 
 interface UseShopReturn {
@@ -59,26 +60,41 @@ const initialCustomer: Customer = {
   },
 }
 
+// Load initial state from session
+function getInitialState() {
+  const session = loadSession()
+  return {
+    screen: (session?.screen as ShopScreen) ?? 'catalog',
+    selectedProductId: session?.selectedProductId ?? null,
+    customer: session?.customer ?? initialCustomer,
+    paymentRef: session?.paymentRef ?? '',
+    orderId: session?.orderId ?? '',
+    currentOrder: session?.currentOrder as Order | null ?? null,
+  }
+}
+
 export function useShop(): UseShopReturn {
+  const initial = getInitialState()
+
   // Screen state
-  const [screen, setScreen] = useState<ShopScreen>('catalog')
+  const [screen, setScreenState] = useState<ShopScreen>(initial.screen)
 
   // Product selection
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(initial.selectedProductId)
 
   // Cart
   const cart = useCart()
 
   // Customer details
-  const [customer, setCustomer] = useState<Customer>(initialCustomer)
+  const [customer, setCustomerState] = useState<Customer>(initial.customer)
 
   // Order
-  const [orderId, setOrderId] = useState('')
-  const [currentOrder, setCurrentOrder] = useState<Order | null>(null)
+  const [orderId, setOrderId] = useState(initial.orderId)
+  const [currentOrder, setCurrentOrder] = useState<Order | null>(initial.currentOrder)
 
-  // Payment
+  // Payment (proof not persisted - too large)
   const [paymentProof, setPaymentProof] = useState<string | null>(null)
-  const [paymentRef, setPaymentRef] = useState('')
+  const [paymentRef, setPaymentRefState] = useState(initial.paymentRef)
 
   // Lookup
   const [lookupOrderId, setLookupOrderId] = useState('')
@@ -88,11 +104,50 @@ export function useShop(): UseShopReturn {
   // Error
   const [error, setError] = useState('')
 
+  // Wrapped setters that also save to session
+  const setScreen = useCallback((newScreen: ShopScreen) => {
+    setScreenState(newScreen)
+    saveSession({ screen: newScreen })
+  }, [])
+
+  const setCustomer = useCallback((newCustomer: Customer) => {
+    setCustomerState(newCustomer)
+    saveSession({ customer: newCustomer })
+  }, [])
+
+  const setPaymentRef = useCallback((ref: string) => {
+    setPaymentRefState(ref)
+    saveSession({ paymentRef: ref })
+  }, [])
+
+  // Save order state to session when it changes
+  useEffect(() => {
+    if (orderId || currentOrder) {
+      saveSession({
+        orderId,
+        currentOrder: currentOrder ? {
+          id: currentOrder.id,
+          items: currentOrder.items,
+          subtotal: currentOrder.subtotal,
+          shippingFee: currentOrder.shippingFee,
+          total: currentOrder.total,
+          customer: currentOrder.customer,
+          status: currentOrder.status,
+        } : null,
+      })
+    }
+  }, [orderId, currentOrder])
+
+  // Save selectedProductId to session when it changes
+  useEffect(() => {
+    saveSession({ selectedProductId })
+  }, [selectedProductId])
+
   // Select product and navigate to product screen
   const selectProduct = useCallback((productId: string) => {
     setSelectedProductId(productId)
     setScreen('product')
-  }, [])
+  }, [setScreen])
 
   // Submit order
   const submitOrder = useCallback(async () => {
@@ -155,7 +210,7 @@ export function useShop(): UseShopReturn {
     setCurrentOrder(order)
     cart.clearCart()
     setScreen('processing')
-  }, [paymentRef, paymentProof, cart, customer])
+  }, [paymentRef, paymentProof, cart, customer, setScreen])
 
   // Lookup order
   const lookupOrder = useCallback(async () => {
@@ -203,16 +258,18 @@ export function useShop(): UseShopReturn {
 
   // Reset the entire flow
   const resetFlow = useCallback(() => {
-    setScreen('catalog')
+    setScreenState('catalog')
     setSelectedProductId(null)
-    setCustomer(initialCustomer)
+    setCustomerState(initialCustomer)
     setOrderId('')
     setCurrentOrder(null)
     setPaymentProof(null)
-    setPaymentRef('')
+    setPaymentRefState('')
     setLookupOrderId('')
     setLookupResult(null)
     setError('')
+    // Clear session on reset
+    clearSession()
     // Note: cart is not cleared on reset - user might want to continue shopping
   }, [])
 

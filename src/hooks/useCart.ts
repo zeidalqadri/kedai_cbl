@@ -1,7 +1,8 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CartItem, Cart } from '../types'
 import { config } from '../config'
 import { getProductPrice, getProductById } from '../lib/constants'
+import { saveSession, loadSession } from '../lib/session'
 
 interface UseCartReturn {
   // Cart state
@@ -18,10 +19,22 @@ interface UseCartReturn {
 
   // Computed
   getItemQuantity: (productId: string, size: string) => number
+
+  // For session restore
+  restoreItems: (items: CartItem[]) => void
 }
 
 export function useCart(): UseCartReturn {
-  const [items, setItems] = useState<CartItem[]>([])
+  const [items, setItems] = useState<CartItem[]>(() => {
+    // Initialize from session if available
+    const session = loadSession()
+    return session?.cartItems ?? []
+  })
+
+  // Save cart to session whenever it changes
+  useEffect(() => {
+    saveSession({ cartItems: items })
+  }, [items])
 
   // Add item to cart
   const addItem = useCallback((productId: string, size: string, quantity: number = 1) => {
@@ -78,6 +91,11 @@ export function useCart(): UseCartReturn {
     setItems([])
   }, [])
 
+  // Restore items from session (used by useShop)
+  const restoreItems = useCallback((restoredItems: CartItem[]) => {
+    setItems(restoredItems)
+  }, [])
+
   // Get quantity for a specific item
   const getItemQuantity = useCallback((productId: string, size: string): number => {
     const item = items.find(i => i.productId === productId && i.size === size)
@@ -118,5 +136,6 @@ export function useCart(): UseCartReturn {
     removeItem,
     clearCart,
     getItemQuantity,
+    restoreItems,
   }
 }
