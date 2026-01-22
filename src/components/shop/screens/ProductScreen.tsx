@@ -64,71 +64,80 @@ export function ProductScreen({ shop }: ProductScreenProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-auto -mx-4 px-4">
-        {/* Main Image */}
-        <div className="bg-white rounded-2xl overflow-hidden mb-4">
-          <div className="aspect-square">
-            <img
-              src={product.images[selectedImageIndex]}
-              alt={product.name}
-              className="w-full h-full object-contain"
-            />
-          </div>
-        </div>
-
-        {/* Image Thumbnails */}
-        {product.images.length > 1 && (
-          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-            {product.images.map((image, index) => (
-              <button
-                key={index}
-                onClick={() => setSelectedImageIndex(index)}
-                className={cx(
-                  'flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all',
-                  selectedImageIndex === index
-                    ? 'border-cbl-orange'
-                    : 'border-white/10 hover:border-white/20'
-                )}
-              >
+        {/* Desktop: side-by-side layout */}
+        <div className="lg:flex lg:gap-8">
+          {/* Image section */}
+          <div className="lg:w-1/2 lg:flex-shrink-0">
+            {/* Main Image */}
+            <div className="bg-white rounded-2xl overflow-hidden mb-4">
+              <div className="aspect-square">
                 <img
-                  src={image}
-                  alt={`${product.name} view ${index + 1}`}
-                  className="w-full h-full object-cover bg-white"
+                  src={product.images[selectedImageIndex]}
+                  alt={product.name}
+                  className="w-full h-full object-contain"
                 />
-              </button>
-            ))}
-          </div>
-        )}
+              </div>
+            </div>
 
-        {/* Product Info */}
-        <div className="mb-6">
-          <h2 className={text.h2}>{product.name}</h2>
-          <p className={cx('mt-2', text.secondary)}>{product.description}</p>
-          <div className={cx(text.price, 'text-2xl mt-3')}>
-            {formatMYR(currentPrice)}
+            {/* Image Thumbnails */}
+            {product.images.length > 1 && (
+              <div className="flex gap-2 mb-6 lg:mb-0 overflow-x-auto pb-2 lg:flex-wrap">
+                {product.images.map((image, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setSelectedImageIndex(index)}
+                    className={cx(
+                      'flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all',
+                      selectedImageIndex === index
+                        ? 'border-cbl-orange'
+                        : 'border-white/10 hover:border-white/20'
+                    )}
+                  >
+                    <img
+                      src={image}
+                      alt={`${product.name} view ${index + 1}`}
+                      className="w-full h-full object-cover bg-white"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* Size Selector */}
-        <div className="mb-6">
-          <label className={cx('text-sm mb-3 block', text.secondary)}>
-            Select Size
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {product.sizes.map(size => (
-              <button
-                key={size.id}
-                onClick={() => setSelectedSize(size.id)}
-                disabled={!size.available}
-                className={cx(
-                  ui.sizeBtn,
-                  'px-4',
-                  selectedSize === size.id && ui.sizeBtnSelected,
-                  !size.available && ui.sizeBtnDisabled
-                )}
-              >
-                {size.label}
-              </button>
-            ))}
+          {/* Info section */}
+          <div className="lg:flex-1">
+            {/* Product Info */}
+            <div className="mb-6">
+              <h2 className={text.h2}>{product.name}</h2>
+              <p className={cx('mt-2', text.secondary)}>{product.description}</p>
+              <div className={cx(text.price, 'text-2xl mt-3')}>
+                {formatMYR(currentPrice)}
+              </div>
+            </div>
+
+            {/* Size Selector */}
+            <div className="mb-6">
+              <label className={cx('text-sm mb-3 block', text.secondary)}>
+                Select Size
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {product.sizes.map(size => (
+                  <button
+                    key={size.id}
+                    onClick={() => setSelectedSize(size.id)}
+                    disabled={!size.available}
+                    className={cx(
+                      ui.sizeBtn,
+                      'px-4',
+                      selectedSize === size.id && ui.sizeBtnSelected,
+                      !size.available && ui.sizeBtnDisabled
+                    )}
+                  >
+                    {size.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>

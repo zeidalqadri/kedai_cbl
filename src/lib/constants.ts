@@ -33,7 +33,11 @@ export const PRODUCTS: Record<string, Product> = {
     description: 'Official CBL game ball. Available in sizes 5, 6, and 7.',
     price: 129, // MYR - placeholder price (size 5)
     images: [
-      '/products/basketball/placeholder.svg',
+      '/products/basketball/CBL_Basketball_3stacked.png',    // Hero/main - all 3 sizes
+      '/products/basketball/CBL_Basketball_relative.png',   // Size comparison
+      '/products/basketball/CBL_Basketball_5.png',          // Size 5
+      '/products/basketball/CBL_Basketball_6.png',          // Size 6
+      '/products/basketball/CBL_Basketball_7.png',          // Size 7
     ],
     sizes: [
       { id: '5', label: 'Size 5 (Youth)', available: true },

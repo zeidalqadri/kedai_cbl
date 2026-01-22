@@ -1,7 +1,7 @@
 import { PRODUCT_LIST } from '../../../lib/constants'
-import { formatMYR } from '../../../lib/utils'
 import { layout, ui, cx, text } from '../../../lib/ui-primitives'
 import { CartIcon, SearchIcon } from '../../icons'
+import { ProductCard } from '../ProductCard'
 import type { useShop } from '../../../hooks/useShop'
 
 interface CatalogScreenProps {
@@ -10,7 +10,7 @@ interface CatalogScreenProps {
 }
 
 export function CatalogScreen({ shop, onAdminClick }: CatalogScreenProps) {
-  const { selectProduct, cart, setScreen } = shop
+  const { cart, setScreen } = shop
 
   return (
     <div className={layout.screenContent}>
@@ -47,41 +47,13 @@ export function CatalogScreen({ shop, onAdminClick }: CatalogScreenProps) {
 
       {/* Product Grid */}
       <div className="flex-1 overflow-auto -mx-4 px-4">
-        <div className="grid grid-cols-1 gap-4 pb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 pb-4">
           {PRODUCT_LIST.map(product => (
-            <button
+            <ProductCard
               key={product.id}
-              onClick={() => selectProduct(product.id)}
-              className={cx(ui.productCard, 'w-full text-left')}
-            >
-              {/* Product Image */}
-              <div className="aspect-[4/3] bg-white/5 overflow-hidden">
-                <img
-                  src={product.images[0]}
-                  alt={product.name}
-                  className="w-full h-full object-contain"
-                  loading="lazy"
-                />
-              </div>
-              {/* Product Info */}
-              <div className="p-4">
-                <h3 className={cx(text.h3, 'text-lg')}>{product.name}</h3>
-                <p className={cx('text-sm mt-1 line-clamp-2', text.secondary)}>
-                  {product.description}
-                </p>
-                <div className="flex items-center justify-between mt-3">
-                  <span className={cx(text.price, 'text-lg')}>
-                    {formatMYR(product.price)}
-                    {product.id === 'cbl-basketball' && (
-                      <span className={cx('text-sm ml-1', text.secondary)}>and up</span>
-                    )}
-                  </span>
-                  <span className={cx(ui.badgeOrange)}>
-                    {product.sizes.length} sizes
-                  </span>
-                </div>
-              </div>
-            </button>
+              product={product}
+              onAddToCart={(productId, size) => cart.addItem(productId, size, 1)}
+            />
           ))}
         </div>
       </div>

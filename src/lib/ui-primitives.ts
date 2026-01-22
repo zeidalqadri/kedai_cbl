@@ -27,21 +27,25 @@ export const layout = {
   backdrop: 'h-dvh flex items-center justify-center p-4 bg-[radial-gradient(circle_at_top,_rgba(255,107,53,0.08),_transparent_55%),radial-gradient(circle_at_bottom,_rgba(255,107,53,0.05),_transparent_60%)]',
 
   // Shop shell - responsive sizing
-  // Mobile: full height, Desktop: fixed max
+  // Mobile: full width card, Desktop: expands to fill available space
   shopShell: cx(
     'w-full rounded-[28px] border border-white/10 bg-white/[0.03] shadow-[0_30px_80px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col',
     // Mobile: use available height with safe areas
     'h-[calc(100dvh-2rem)]',
-    // Tablet/Desktop: constrained max width and height
-    'sm:max-w-md sm:h-[min(850px,calc(100dvh-4rem))]',
-    'lg:max-w-lg'
+    // Tablet: moderate height constraint
+    'sm:h-[min(900px,calc(100dvh-4rem))]',
+    // Desktop+: expand to fill width (with max for readability)
+    'lg:max-w-5xl',      // 1024px
+    'xl:max-w-6xl',      // 1152px
+    '2xl:max-w-7xl'      // 1280px
   ),
 
   // Screen content wrapper with responsive padding
   screenContent: cx(
     'flex flex-col h-full',
-    'px-4 py-5',      // Mobile: tighter padding
-    'sm:px-6 sm:py-8' // Tablet+: more breathing room
+    'px-4 py-5',       // Mobile
+    'sm:px-6 sm:py-8', // Tablet
+    'lg:px-8 lg:py-8'  // Desktop: more horizontal room
   ),
 }
 
