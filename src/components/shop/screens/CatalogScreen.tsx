@@ -1,6 +1,6 @@
 import { PRODUCT_LIST } from '../../../lib/constants'
 import { layout, ui, cx, text } from '../../../lib/ui-primitives'
-import { CartIcon, SearchIcon } from '../../icons'
+import { CartIcon, TruckIcon } from '../../icons'
 import { ProductCard } from '../ProductCard'
 import type { useShop } from '../../../hooks/useShop'
 
@@ -40,7 +40,7 @@ export function CatalogScreen({ shop, onAdminClick }: CatalogScreenProps) {
             className={cx(ui.btnBase, ui.btnGhost, 'px-3')}
             aria-label="Track order"
           >
-            <SearchIcon />
+            <TruckIcon />
           </button>
         </div>
       </div>
