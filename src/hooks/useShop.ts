@@ -5,6 +5,8 @@ import { getProductById } from '../lib/constants'
 import { saveSession, loadSession, clearSession } from '../lib/session'
 import { useCart } from './useCart'
 
+type LookupMode = 'order_id' | 'email_postcode'
+
 interface UseShopReturn {
   // Screen state
   screen: ShopScreen
@@ -32,10 +34,19 @@ interface UseShopReturn {
   setPaymentRef: (ref: string) => void
 
   // Lookup
+  lookupMode: LookupMode
+  setLookupMode: (mode: LookupMode) => void
   lookupOrderId: string
   setLookupOrderId: (id: string) => void
+  lookupEmail: string
+  setLookupEmail: (email: string) => void
+  lookupPostcode: string
+  setLookupPostcode: (postcode: string) => void
   lookupResult: Order | null
+  lookupResults: Order[]
   lookupLoading: boolean
+  selectedLookupOrder: Order | null
+  setSelectedLookupOrder: (order: Order | null) => void
 
   // Error
   error: string
@@ -44,6 +55,7 @@ interface UseShopReturn {
   // Actions
   submitOrder: () => Promise<void>
   lookupOrder: () => Promise<void>
+  lookupByEmailPostcode: () => Promise<void>
   resetFlow: () => void
 }
 
@@ -97,9 +109,14 @@ export function useShop(): UseShopReturn {
   const [paymentRef, setPaymentRefState] = useState(initial.paymentRef)
 
   // Lookup
+  const [lookupMode, setLookupMode] = useState<LookupMode>('order_id')
   const [lookupOrderId, setLookupOrderId] = useState('')
+  const [lookupEmail, setLookupEmail] = useState('')
+  const [lookupPostcode, setLookupPostcode] = useState('')
   const [lookupResult, setLookupResult] = useState<Order | null>(null)
+  const [lookupResults, setLookupResults] = useState<Order[]>([])
   const [lookupLoading, setLookupLoading] = useState(false)
+  const [selectedLookupOrder, setSelectedLookupOrder] = useState<Order | null>(null)
 
   // Error
   const [error, setError] = useState('')
@@ -212,7 +229,7 @@ export function useShop(): UseShopReturn {
     setScreen('processing')
   }, [paymentRef, paymentProof, cart, customer, setScreen])
 
-  // Lookup order
+  // Lookup order by ID
   const lookupOrder = useCallback(async () => {
     if (!lookupOrderId.trim()) {
       setError('Please enter an order ID')
@@ -222,6 +239,7 @@ export function useShop(): UseShopReturn {
     setError('')
     setLookupLoading(true)
     setLookupResult(null)
+    setSelectedLookupOrder(null)
 
     const result = await orderApi.lookup(lookupOrderId.trim().toUpperCase())
     setLookupLoading(false)
@@ -256,6 +274,72 @@ export function useShop(): UseShopReturn {
     setLookupResult(order)
   }, [lookupOrderId])
 
+  // Lookup orders by email + postcode
+  const lookupByEmailPostcode = useCallback(async () => {
+    if (!lookupEmail.trim()) {
+      setError('Please enter your email address')
+      return
+    }
+    if (!lookupPostcode.trim()) {
+      setError('Please enter your postcode')
+      return
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(lookupEmail.trim())) {
+      setError('Please enter a valid email address')
+      return
+    }
+
+    // Postcode validation (5 digits for Malaysia)
+    if (!/^\d{5}$/.test(lookupPostcode.trim())) {
+      setError('Please enter a valid 5-digit postcode')
+      return
+    }
+
+    setError('')
+    setLookupLoading(true)
+    setLookupResults([])
+    setSelectedLookupOrder(null)
+
+    const result = await orderApi.lookupByEmail(lookupEmail.trim(), lookupPostcode.trim())
+    setLookupLoading(false)
+
+    if (!result.success || !result.data) {
+      setError(result.error || 'No orders found')
+      return
+    }
+
+    // Convert API response to Order format
+    const orders: Order[] = result.data.orders.map(apiOrder => ({
+      id: apiOrder.order_id,
+      items: apiOrder.items,
+      subtotal: Number(apiOrder.subtotal),
+      shippingFee: Number(apiOrder.shipping_fee),
+      total: Number(apiOrder.total),
+      customer: {
+        name: '',
+        phone: '',
+        email: lookupEmail.trim(),
+        address: { line1: '', city: '', state: '', postcode: lookupPostcode.trim() },
+      },
+      paymentRef: '',
+      hasProofImage: false,
+      status: apiOrder.status,
+      trackingNumber: apiOrder.tracking_number || undefined,
+      createdAt: new Date(apiOrder.created_at).getTime(),
+      updatedAt: new Date(apiOrder.updated_at).getTime(),
+    }))
+
+    setLookupResults(orders)
+
+    // If only one order found, auto-select it
+    if (orders.length === 1) {
+      setSelectedLookupOrder(orders[0])
+    }
+  }, [lookupEmail, lookupPostcode])
+
   // Reset the entire flow
   const resetFlow = useCallback(() => {
     setScreenState('catalog')
@@ -265,8 +349,13 @@ export function useShop(): UseShopReturn {
     setCurrentOrder(null)
     setPaymentProof(null)
     setPaymentRefState('')
+    setLookupMode('order_id')
     setLookupOrderId('')
+    setLookupEmail('')
+    setLookupPostcode('')
     setLookupResult(null)
+    setLookupResults([])
+    setSelectedLookupOrder(null)
     setError('')
     // Clear session on reset
     clearSession()
@@ -287,14 +376,24 @@ export function useShop(): UseShopReturn {
     setPaymentProof,
     paymentRef,
     setPaymentRef,
+    lookupMode,
+    setLookupMode,
     lookupOrderId,
     setLookupOrderId,
+    lookupEmail,
+    setLookupEmail,
+    lookupPostcode,
+    setLookupPostcode,
     lookupResult,
+    lookupResults,
     lookupLoading,
+    selectedLookupOrder,
+    setSelectedLookupOrder,
     error,
     setError,
     submitOrder,
     lookupOrder,
+    lookupByEmailPostcode,
     resetFlow,
   }
 }

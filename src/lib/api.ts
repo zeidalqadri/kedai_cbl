@@ -220,6 +220,24 @@ export interface OrderLookupResponse {
   }
 }
 
+// Response for email+postcode lookup (returns array of orders)
+export interface OrderLookupByEmailResponse {
+  success: boolean
+  orders: Array<{
+    order_id: string
+    status: OrderStatus
+    status_display: string
+    items: OrderItem[]
+    subtotal: number
+    shipping_fee: number
+    total: number
+    tracking_number: string | null
+    courier: string | null
+    created_at: string
+    updated_at: string
+  }>
+}
+
 export const orderApi = {
   // Create new order (POST /popshop/order/submit)
   async create(input: CreateOrderInput): Promise<ApiResponse<OrderSubmitResponse>> {
@@ -247,6 +265,37 @@ export const orderApi = {
       return {
         success: true,
         data: data as unknown as OrderLookupResponse,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error',
+      }
+    }
+  },
+
+  // Lookup orders by email + postcode (GET /popshop/order/lookup?email=&postcode=)
+  async lookupByEmail(email: string, postcode: string): Promise<ApiResponse<OrderLookupByEmailResponse>> {
+    try {
+      const params = new URLSearchParams({
+        email: email.toLowerCase().trim(),
+        postcode: postcode.trim(),
+      })
+      const response = await fetch(`${API_BASE}/popshop/order/lookup?${params}`)
+      const data = await response.json() as N8nApiResponse
+
+      // n8n workflows use 'success' field
+      if (!data.success) {
+        return {
+          success: false,
+          error: data.error || data.message || 'No orders found',
+          errorCode: data.error_code || data.code,
+        }
+      }
+
+      return {
+        success: true,
+        data: data as unknown as OrderLookupByEmailResponse,
       }
     } catch (error) {
       return {

@@ -18,13 +18,40 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract order_id from query params\nconst orderId = $input.first().json.query?.order_id || '';\n\n// Validate order ID format (PS prefix for Popshop)\nconst isValid = /^PS[A-Z0-9]{6,8}$/i.test(orderId);\n\nreturn [{\n  json: {\n    orderId: orderId.toUpperCase(),\n    isValid,\n    errorMessage: isValid ? null : 'Invalid order ID format. Expected format: PS followed by 6-8 alphanumeric characters (e.g., PS1A2B3C)'\n  }\n}];"
+        "jsCode": "// Extract query params\nconst query = $input.first().json.query || {};\nconst orderId = query.order_id || '';\nconst email = query.email || '';\nconst postcode = query.postcode || '';\n\n// Determine lookup method\nlet lookupMethod = 'none';\nif (orderId) {\n  lookupMethod = 'order_id';\n} else if (email && postcode) {\n  lookupMethod = 'email_postcode';\n}\n\nreturn [{\n  json: {\n    lookupMethod,\n    orderId: orderId.toUpperCase(),\n    email: email.toLowerCase().trim(),\n    postcode: postcode.trim()\n  }\n}];"
       },
-      "id": "validate",
-      "name": "Validate Order ID",
+      "id": "parse-params",
+      "name": "Parse Parameters",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.lookupMethod }}",
+              "value2": "order_id"
+            }
+          ]
+        }
+      },
+      "id": "route-method",
+      "name": "Route by Method",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate order ID format (PS prefix for Popshop)\nconst orderId = $input.first().json.orderId;\nconst isValid = /^PS[A-Z0-9]{6,8}$/i.test(orderId);\n\nreturn [{\n  json: {\n    orderId,\n    isValid,\n    errorMessage: isValid ? null : 'Invalid order ID format. Expected format: PS followed by 6-8 alphanumeric characters (e.g., PS1A2B3C)'\n  }\n}];"
+      },
+      "id": "validate-order-id",
+      "name": "Validate Order ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 200]
     },
     {
       "parameters": {
@@ -37,11 +64,11 @@
           ]
         }
       },
-      "id": "check-valid",
-      "name": "Is Valid?",
+      "id": "check-valid-id",
+      "name": "ID Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [700, 300]
+      "position": [1140, 200]
     },
     {
       "parameters": {
@@ -49,11 +76,11 @@
         "query": "SELECT * FROM popshop_orders WHERE order_id = '{{ $json.orderId }}';",
         "options": {}
       },
-      "id": "fetch-order",
-      "name": "Fetch Order",
+      "id": "fetch-by-id",
+      "name": "Fetch by Order ID",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [920, 200],
+      "position": [1360, 100],
       "credentials": {
         "postgres": {
           "id": "XBVFwEM8RKk32yyj",
@@ -73,21 +100,21 @@
           ]
         }
       },
-      "id": "check-found",
-      "name": "Order Found?",
+      "id": "check-found-id",
+      "name": "Order Found (ID)?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1140, 200]
+      "position": [1580, 100]
     },
     {
       "parameters": {
-        "jsCode": "const order = $input.first().json[0];\n\n// Status display mapping\nconst STATUS_MAP = {\n  'pending': { emoji: '⏳', label: 'Pending Payment Verification' },\n  'confirmed': { emoji: '✅', label: 'Order Confirmed' },\n  'processing': { emoji: '📦', label: 'Processing & Packing' },\n  'shipped': { emoji: '🚚', label: 'Shipped' },\n  'delivered': { emoji: '🎉', label: 'Delivered' },\n  'cancelled': { emoji: '❌', label: 'Cancelled' },\n  'refunded': { emoji: '💸', label: 'Refunded' }\n};\n\nconst status = STATUS_MAP[order.status] || { emoji: '❓', label: order.status };\n\n// Sanitize customer data for public display\nconst sanitized = {\n  order_id: order.order_id,\n  status: order.status,\n  status_display: `${status.emoji} ${status.label}`,\n  items: order.items,\n  subtotal: order.subtotal,\n  shipping_fee: order.shipping_fee,\n  total: order.total,\n  tracking_number: order.tracking_number || null,\n  courier: order.courier || null,\n  created_at: order.created_at,\n  updated_at: order.updated_at\n};\n\nreturn [{ json: sanitized }];"
+        "jsCode": "const order = $input.first().json[0];\n\n// Status display mapping\nconst STATUS_MAP = {\n  'pending': { emoji: '\\u23F3', label: 'Pending Payment Verification' },\n  'confirmed': { emoji: '\\u2705', label: 'Order Confirmed' },\n  'processing': { emoji: '\\uD83D\\uDCE6', label: 'Processing & Packing' },\n  'shipped': { emoji: '\\uD83D\\uDE9A', label: 'Shipped' },\n  'delivered': { emoji: '\\uD83C\\uDF89', label: 'Delivered' },\n  'cancelled': { emoji: '\\u274C', label: 'Cancelled' },\n  'refunded': { emoji: '\\uD83D\\uDCB8', label: 'Refunded' }\n};\n\nconst status = STATUS_MAP[order.status] || { emoji: '\\u2753', label: order.status };\n\n// Sanitize customer data for public display\nconst sanitized = {\n  order_id: order.order_id,\n  status: order.status,\n  status_display: `${status.emoji} ${status.label}`,\n  items: order.items,\n  subtotal: order.subtotal,\n  shipping_fee: order.shipping_fee,\n  total: order.total,\n  tracking_number: order.tracking_number || null,\n  courier: order.courier || null,\n  created_at: order.created_at,\n  updated_at: order.updated_at\n};\n\nreturn [{ json: sanitized }];"
       },
-      "id": "sanitize",
-      "name": "Sanitize Response",
+      "id": "sanitize-single",
+      "name": "Sanitize Single Order",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1360, 100]
+      "position": [1800, 0]
     },
     {
       "parameters": {
@@ -97,11 +124,11 @@
           "responseCode": 200
         }
       },
-      "id": "success-response",
-      "name": "Success Response",
+      "id": "success-single",
+      "name": "Success (Single Order)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1580, 100]
+      "position": [2020, 0]
     },
     {
       "parameters": {
@@ -111,11 +138,11 @@
           "responseCode": 404
         }
       },
-      "id": "not-found-response",
-      "name": "Not Found Response",
+      "id": "not-found-id",
+      "name": "Not Found (ID)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1360, 300]
+      "position": [1800, 200]
     },
     {
       "parameters": {
@@ -125,37 +152,219 @@
           "responseCode": 400
         }
       },
-      "id": "invalid-response",
+      "id": "invalid-id-response",
       "name": "Invalid ID Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.lookupMethod }}",
+              "value2": "email_postcode"
+            }
+          ]
+        }
+      },
+      "id": "check-email-postcode",
+      "name": "Email+Postcode?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
       "position": [920, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate email and postcode format\nconst { email, postcode } = $input.first().json;\n\n// Email validation regex\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nconst isEmailValid = emailRegex.test(email);\n\n// Postcode validation (5 digits for Malaysia)\nconst isPostcodeValid = /^\\d{5}$/.test(postcode);\n\nconst isValid = isEmailValid && isPostcodeValid;\n\nlet errorMessage = null;\nif (!isEmailValid) {\n  errorMessage = 'Invalid email format';\n} else if (!isPostcodeValid) {\n  errorMessage = 'Invalid postcode format. Expected 5 digits (e.g., 47500)';\n}\n\nreturn [{\n  json: {\n    email,\n    postcode,\n    isValid,\n    errorMessage\n  }\n}];"
+      },
+      "id": "validate-email-postcode",
+      "name": "Validate Email+Postcode",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-valid-email",
+      "name": "Email Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1360, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM popshop_orders WHERE customer_email = '{{ $json.email }}' AND shipping_address->>'postcode' = '{{ $json.postcode }}' ORDER BY created_at DESC LIMIT 10;",
+        "options": {}
+      },
+      "id": "fetch-by-email",
+      "name": "Fetch by Email+Postcode",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1580, 350],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "check-found-email",
+      "name": "Orders Found (Email)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1800, 350]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orders = $input.first().json;\n\n// Status display mapping\nconst STATUS_MAP = {\n  'pending': { emoji: '\\u23F3', label: 'Pending Payment Verification' },\n  'confirmed': { emoji: '\\u2705', label: 'Order Confirmed' },\n  'processing': { emoji: '\\uD83D\\uDCE6', label: 'Processing & Packing' },\n  'shipped': { emoji: '\\uD83D\\uDE9A', label: 'Shipped' },\n  'delivered': { emoji: '\\uD83C\\uDF89', label: 'Delivered' },\n  'cancelled': { emoji: '\\u274C', label: 'Cancelled' },\n  'refunded': { emoji: '\\uD83D\\uDCB8', label: 'Refunded' }\n};\n\n// Sanitize all orders for public display\nconst sanitizedOrders = orders.map(order => {\n  const status = STATUS_MAP[order.status] || { emoji: '\\u2753', label: order.status };\n  return {\n    order_id: order.order_id,\n    status: order.status,\n    status_display: `${status.emoji} ${status.label}`,\n    items: order.items,\n    subtotal: order.subtotal,\n    shipping_fee: order.shipping_fee,\n    total: order.total,\n    tracking_number: order.tracking_number || null,\n    courier: order.courier || null,\n    created_at: order.created_at,\n    updated_at: order.updated_at\n  };\n});\n\nreturn [{ json: { orders: sanitizedOrders } }];"
+      },
+      "id": "sanitize-multiple",
+      "name": "Sanitize Multiple Orders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2020, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, orders: $json.orders }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success-multiple",
+      "name": "Success (Multiple Orders)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2240, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'No orders found for this email and postcode combination', code: 'NOT_FOUND' }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "not-found-email",
+      "name": "Not Found (Email)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2020, 450]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.errorMessage, code: 'INVALID_FORMAT' }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "invalid-email-response",
+      "name": "Invalid Email Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1580, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Missing parameters. Provide either order_id OR email and postcode', code: 'MISSING_PARAMS' }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "missing-params",
+      "name": "Missing Params Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1140, 600]
     }
   ],
   "connections": {
     "Webhook": {
-      "main": [[{ "node": "Validate Order ID", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Parse Parameters", "type": "main", "index": 0 }]]
+    },
+    "Parse Parameters": {
+      "main": [[{ "node": "Route by Method", "type": "main", "index": 0 }]]
+    },
+    "Route by Method": {
+      "main": [
+        [{ "node": "Validate Order ID", "type": "main", "index": 0 }],
+        [{ "node": "Email+Postcode?", "type": "main", "index": 0 }]
+      ]
     },
     "Validate Order ID": {
-      "main": [[{ "node": "Is Valid?", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "ID Valid?", "type": "main", "index": 0 }]]
     },
-    "Is Valid?": {
+    "ID Valid?": {
       "main": [
-        [{ "node": "Fetch Order", "type": "main", "index": 0 }],
+        [{ "node": "Fetch by Order ID", "type": "main", "index": 0 }],
         [{ "node": "Invalid ID Response", "type": "main", "index": 0 }]
       ]
     },
-    "Fetch Order": {
-      "main": [[{ "node": "Order Found?", "type": "main", "index": 0 }]]
+    "Fetch by Order ID": {
+      "main": [[{ "node": "Order Found (ID)?", "type": "main", "index": 0 }]]
     },
-    "Order Found?": {
+    "Order Found (ID)?": {
       "main": [
-        [{ "node": "Sanitize Response", "type": "main", "index": 0 }],
-        [{ "node": "Not Found Response", "type": "main", "index": 0 }]
+        [{ "node": "Sanitize Single Order", "type": "main", "index": 0 }],
+        [{ "node": "Not Found (ID)", "type": "main", "index": 0 }]
       ]
     },
-    "Sanitize Response": {
-      "main": [[{ "node": "Success Response", "type": "main", "index": 0 }]]
+    "Sanitize Single Order": {
+      "main": [[{ "node": "Success (Single Order)", "type": "main", "index": 0 }]]
+    },
+    "Email+Postcode?": {
+      "main": [
+        [{ "node": "Validate Email+Postcode", "type": "main", "index": 0 }],
+        [{ "node": "Missing Params Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Email+Postcode": {
+      "main": [[{ "node": "Email Valid?", "type": "main", "index": 0 }]]
+    },
+    "Email Valid?": {
+      "main": [
+        [{ "node": "Fetch by Email+Postcode", "type": "main", "index": 0 }],
+        [{ "node": "Invalid Email Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch by Email+Postcode": {
+      "main": [[{ "node": "Orders Found (Email)?", "type": "main", "index": 0 }]]
+    },
+    "Orders Found (Email)?": {
+      "main": [
+        [{ "node": "Sanitize Multiple Orders", "type": "main", "index": 0 }],
+        [{ "node": "Not Found (Email)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Sanitize Multiple Orders": {
+      "main": [[{ "node": "Success (Multiple Orders)", "type": "main", "index": 0 }]]
     }
   },
   "settings": {
