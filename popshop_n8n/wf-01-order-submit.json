@@ -214,7 +214,7 @@
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "position": [3120, 100],
-      "credentials": { "smtp": { "id": "SMTP_CREDENTIAL_ID", "name": "SMTP" } },
+      "credentials": { "smtp": { "id": "hCZX1kGIsQ2X1cVZ", "name": "Gmail SMTP" } },
       "onError": "continueRegularOutput"
     },
     {
