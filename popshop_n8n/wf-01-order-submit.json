@@ -21,7 +21,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ============================================\n// TELEGRAM CONFIGURATION - EDIT THESE VALUES\n// ============================================\nconst TELEGRAM_BOT_TOKEN = 'YOUR_BOT_TOKEN_HERE';\nconst TELEGRAM_CHAT_ID = 'YOUR_CHAT_ID_HERE';\n// ============================================\n\n// Pass through input data with config\nconst input = $input.first().json.body || $input.first().json;\nreturn [{ json: { ...input, _config: { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID } } }];"
+        "jsCode": "// ============================================\n// CONFIGURATION - EDIT THESE VALUES\n// ============================================\nconst TELEGRAM_BOT_TOKEN = 'YOUR_BOT_TOKEN_HERE';\nconst TELEGRAM_CHAT_ID = '5426763403';\nconst ADMIN_EMAIL = 'your-admin-email@example.com';\n// ============================================\n\n// Pass through input data with config\nconst input = $input.first().json.body || $input.first().json;\nreturn [{ json: { ...input, _config: { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ADMIN_EMAIL } } }];"
       },
       "id": "02-config",
       "name": "02-config",
@@ -29,7 +29,7 @@
       "typeVersion": 2,
       "position": [480, 300],
       "notesInFlow": true,
-      "notes": "⚠️ EDIT THIS NODE: Set your Telegram Bot Token and Chat ID above"
+      "notes": "⚠️ EDIT: Set Telegram Token, Chat ID, and Admin Email"
     },
     {
       "parameters": {
@@ -85,10 +85,10 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const orderData = $('20-generate-order').first().json;\nconst config = orderData._config;\nconst order = orderData.order;\nconst items = orderData.input.items;\nconst proofImageBase64 = orderData.proofImageBase64;\n\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\n\n// Build items list\nlet itemsList = items.map(item => `  • ${item.productName} (${item.size}) x${item.quantity} - ${formatMYR(item.price * item.quantity)}`).join('\\n');\n\nconst address = orderData.input.customer.address;\nconst addressStr = `${address.line1}${address.line2 ? ', ' + address.line2 : ''}, ${address.postcode} ${address.city}, ${address.state}`;\n\nconst message = `🏀 <b>NEW CBL POPSHOP ORDER</b>\\n\\n📋 <b>Order ID:</b> <code>${order.id}</code>\\n\\n🛒 <b>Items:</b>\\n${itemsList}\\n\\n💰 <b>Subtotal:</b> ${formatMYR(order.subtotal)}\\n🚚 <b>Shipping:</b> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}\\n💵 <b>Total:</b> ${formatMYR(order.total)}\\n\\n👤 <b>Customer:</b>\\n├ Name: ${order.customer_name}\\n├ Phone: ${order.customer_phone}\\n├ Email: ${order.customer_email}\\n└ Address: ${addressStr}\\n\\n💳 <b>Payment Ref:</b> ${order.payment_ref || '(see attached screenshot)'}\\n📷 <b>Proof Image:</b> ${order.has_proof_image ? '✅ Attached below' : '❌ None'}\\n📅 <b>Time:</b> ${new Date(order.created_at).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}\\n\\n⏳ <b>Status:</b> Awaiting payment verification`;\n\nconst inlineKeyboard = {\n  inline_keyboard: [\n    [\n      { text: '✅ Verify Payment', callback_data: `popshop_paid_${order.id}` },\n      { text: '❌ Cancel', callback_data: `popshop_cancel_${order.id}` }\n    ]\n  ]\n};\n\nreturn [{ json: { _config: config, order: order, telegramMessage: message, inlineKeyboard: inlineKeyboard, proofImageBase64: proofImageBase64 } }];"
+        "jsCode": "const orderData = $('20-generate-order').first().json;\nconst config = orderData._config;\nconst order = orderData.order;\nconst items = orderData.input.items;\nconst proofImageBase64 = orderData.proofImageBase64;\n\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\n\n// Build items list\nlet itemsList = items.map(item => `  • ${item.productName} (${item.size}) x${item.quantity} - ${formatMYR(item.price * item.quantity)}`).join('\\n');\nlet itemsHtml = items.map(item => `<li>${item.productName} (${item.size}) x${item.quantity} - ${formatMYR(item.price * item.quantity)}</li>`).join('');\n\nconst address = orderData.input.customer.address;\nconst addressStr = `${address.line1}${address.line2 ? ', ' + address.line2 : ''}, ${address.postcode} ${address.city}, ${address.state}`;\n\nconst telegramMessage = `🏀 <b>NEW CBL POPSHOP ORDER</b>\\n\\n📋 <b>Order ID:</b> <code>${order.id}</code>\\n\\n🛒 <b>Items:</b>\\n${itemsList}\\n\\n💰 <b>Subtotal:</b> ${formatMYR(order.subtotal)}\\n🚚 <b>Shipping:</b> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}\\n💵 <b>Total:</b> ${formatMYR(order.total)}\\n\\n👤 <b>Customer:</b>\\n├ Name: ${order.customer_name}\\n├ Phone: ${order.customer_phone}\\n├ Email: ${order.customer_email}\\n└ Address: ${addressStr}\\n\\n💳 <b>Payment Ref:</b> ${order.payment_ref || '(see attached screenshot)'}\\n📷 <b>Proof Image:</b> ${order.has_proof_image ? '✅ Attached below' : '❌ None'}\\n📅 <b>Time:</b> ${new Date(order.created_at).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}\\n\\n⏳ <b>Status:</b> Awaiting payment verification`;\n\nconst emailSubject = `🏀 New Order ${order.id} - ${formatMYR(order.total)} - ACTION REQUIRED`;\nconst emailHtml = `<h2>🏀 New CBL Popshop Order</h2>\n<p><strong>Order ID:</strong> ${order.id}</p>\n<h3>Items:</h3><ul>${itemsHtml}</ul>\n<p><strong>Subtotal:</strong> ${formatMYR(order.subtotal)}<br>\n<strong>Shipping:</strong> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}<br>\n<strong>Total:</strong> ${formatMYR(order.total)}</p>\n<h3>Customer:</h3>\n<p>Name: ${order.customer_name}<br>\nPhone: ${order.customer_phone}<br>\nEmail: ${order.customer_email}<br>\nAddress: ${addressStr}</p>\n<p><strong>Payment Ref:</strong> ${order.payment_ref || '(screenshot attached/uploaded)'}<br>\n<strong>Proof Image:</strong> ${order.has_proof_image ? 'Yes - check admin dashboard' : 'None'}</p>\n<p><strong>Time:</strong> ${new Date(order.created_at).toLocaleString('en-MY')}</p>\n<hr>\n<p>⚠️ <strong>ACTION REQUIRED:</strong> Please verify payment and update order status in admin dashboard.</p>\n<p>🔗 <a href=\"https://cbl-popshop.pages.dev/admin\">Open Admin Dashboard</a></p>`;\n\nconst inlineKeyboard = {\n  inline_keyboard: [\n    [\n      { text: '✅ Verify Payment', callback_data: `popshop_paid_${order.id}` },\n      { text: '❌ Cancel', callback_data: `popshop_cancel_${order.id}` }\n    ]\n  ]\n};\n\nreturn [{ json: { _config: config, order: order, telegramMessage, emailSubject, emailHtml, inlineKeyboard, proofImageBase64 } }];"
       },
       "id": "30-format-telegram",
-      "name": "30-format-telegram",
+      "name": "30-format-notifications",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1580, 200]
@@ -145,10 +145,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.telegram.org/bot{{ $('30-format-telegram').first().json._config.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "url": "=https://api.telegram.org/bot{{ $('30-format-notifications').first().json._config.TELEGRAM_BOT_TOKEN }}/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"chat_id\": \"{{ $('30-format-telegram').first().json._config.TELEGRAM_CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($('30-format-telegram').first().json.telegramMessage) }},\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {{ JSON.stringify($('30-format-telegram').first().json.inlineKeyboard) }}\n}",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('30-format-notifications').first().json._config.TELEGRAM_CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($('30-format-notifications').first().json.telegramMessage) }},\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {{ JSON.stringify($('30-format-notifications').first().json.inlineKeyboard) }}\n}",
         "options": { "timeout": 10000 }
       },
       "id": "35-send-telegram-with-buttons",
@@ -177,13 +177,56 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const order = $('30-format-telegram').first().json.order;\n\nreturn [{ json: {\n  ok: true,\n  success: true,\n  orderId: order.id,\n  status: 'pending',\n  total: order.total,\n  estimatedDelivery: '3-5 business days after payment verification',\n  message: `Order ${order.id} submitted successfully. You will receive updates via email.`,\n  trackingUrl: `/popshop/order/lookup?id=${order.id}`\n} }];"
+        "jsCode": "// Check if Telegram notification succeeded\nconst telegramResponse = $input.first().json;\nconst notificationData = $('30-format-notifications').first().json;\nconst config = notificationData._config;\n\n// Telegram returns {ok: true} on success\nconst telegramSuccess = telegramResponse.ok === true;\n\nreturn [{ json: {\n  telegramSuccess,\n  telegramResponse,\n  ...notificationData\n} }];"
+      },
+      "id": "36-check-telegram-result",
+      "name": "36-check-telegram-result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2680, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "telegram-failed", "leftValue": "={{ $json.telegramSuccess }}", "rightValue": false, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "37-telegram-failed-gate",
+      "name": "37-telegram-failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2900, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@cbl-popshop.pages.dev",
+        "toEmail": "={{ $json._config.ADMIN_EMAIL }}",
+        "subject": "={{ $json.emailSubject }}",
+        "emailType": "html",
+        "html": "={{ $json.emailHtml }}",
+        "options": {}
+      },
+      "id": "38-send-email-fallback",
+      "name": "38-send-email-fallback",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [3120, 100],
+      "credentials": { "smtp": { "id": "SMTP_CREDENTIAL_ID", "name": "SMTP" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $('30-format-notifications').first().json;\nconst order = data.order;\n\nreturn [{ json: {\n  ok: true,\n  success: true,\n  orderId: order.id,\n  status: 'pending',\n  total: order.total,\n  estimatedDelivery: '3-5 business days after payment verification',\n  message: `Order ${order.id} submitted successfully. You will receive updates via email.`,\n  trackingUrl: `/popshop/order/lookup?id=${order.id}`\n} }];"
       },
       "id": "55-format-response",
       "name": "55-format-response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2680, 200]
+      "position": [3340, 200]
     },
     {
       "parameters": {
@@ -195,7 +238,7 @@
       "name": "60-reply-success",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2900, 200]
+      "position": [3560, 200]
     },
     {
       "parameters": {
@@ -228,13 +271,16 @@
     "05-validate-input": { "main": [[ { "node": "06-validation-gate", "type": "main", "index": 0 } ]] },
     "06-validation-gate": { "main": [[ { "node": "20-generate-order", "type": "main", "index": 0 } ], [ { "node": "99-reply-validation-error", "type": "main", "index": 0 } ]] },
     "20-generate-order": { "main": [[ { "node": "25-insert-order", "type": "main", "index": 0 } ]] },
-    "25-insert-order": { "main": [[ { "node": "30-format-telegram", "type": "main", "index": 0 } ], [ { "node": "99-reply-database-error", "type": "main", "index": 0 } ]] },
-    "30-format-telegram": { "main": [[ { "node": "31-check-proof-image", "type": "main", "index": 0 } ]] },
+    "25-insert-order": { "main": [[ { "node": "30-format-notifications", "type": "main", "index": 0 } ], [ { "node": "99-reply-database-error", "type": "main", "index": 0 } ]] },
+    "30-format-notifications": { "main": [[ { "node": "31-check-proof-image", "type": "main", "index": 0 } ]] },
     "31-check-proof-image": { "main": [[ { "node": "32-prepare-image", "type": "main", "index": 0 } ], [ { "node": "35-send-telegram-no-image", "type": "main", "index": 0 } ]] },
     "32-prepare-image": { "main": [[ { "node": "33-send-proof-image", "type": "main", "index": 0 } ]] },
     "33-send-proof-image": { "main": [[ { "node": "35-send-telegram-with-buttons", "type": "main", "index": 0 } ]] },
-    "35-send-telegram-with-buttons": { "main": [[ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
-    "35-send-telegram-no-image": { "main": [[ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
+    "35-send-telegram-with-buttons": { "main": [[ { "node": "36-check-telegram-result", "type": "main", "index": 0 } ]] },
+    "35-send-telegram-no-image": { "main": [[ { "node": "36-check-telegram-result", "type": "main", "index": 0 } ]] },
+    "36-check-telegram-result": { "main": [[ { "node": "37-telegram-failed?", "type": "main", "index": 0 } ]] },
+    "37-telegram-failed?": { "main": [[ { "node": "38-send-email-fallback", "type": "main", "index": 0 } ], [ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
+    "38-send-email-fallback": { "main": [[ { "node": "55-format-response", "type": "main", "index": 0 } ]] },
     "55-format-response": { "main": [[ { "node": "60-reply-success", "type": "main", "index": 0 } ]] }
   },
   "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
