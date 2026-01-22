@@ -21,7 +21,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ============================================\n// CONFIGURATION - EDIT THESE VALUES\n// ============================================\nconst TELEGRAM_BOT_TOKEN = 'YOUR_BOT_TOKEN_HERE';\nconst TELEGRAM_CHAT_ID = '5426763403';\nconst ADMIN_EMAIL = 'your-admin-email@example.com';\n// ============================================\n\n// Pass through input data with config\nconst input = $input.first().json.body || $input.first().json;\nreturn [{ json: { ...input, _config: { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ADMIN_EMAIL } } }];"
+        "jsCode": "// ============================================\n// CONFIGURATION - EDIT THESE VALUES\n// ============================================\nconst TELEGRAM_BOT_TOKEN = 'YOUR_BOT_TOKEN_HERE';\nconst TELEGRAM_CHAT_ID = '5426763403';\nconst ADMIN_EMAIL = 'zeidalqadri@gmail.com';\n// ============================================\n\n// Pass through input data with config\nconst input = $input.first().json.body || $input.first().json;\nreturn [{ json: { ...input, _config: { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ADMIN_EMAIL } } }];"
       },
       "id": "02-config",
       "name": "02-config",
@@ -202,7 +202,7 @@
     },
     {
       "parameters": {
-        "fromEmail": "noreply@cbl-popshop.pages.dev",
+        "fromEmail": "zeidalqadri@gmail.com",
         "toEmail": "={{ $json._config.ADMIN_EMAIL }}",
         "subject": "={{ $json.emailSubject }}",
         "emailType": "html",
