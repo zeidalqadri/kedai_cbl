@@ -2,6 +2,12 @@
 // Handles all HTTP requests to the n8n webhook server
 
 import type { Order, OrderStatus, OrderItem, Customer } from '../types'
+import type {
+  InventoryResponse,
+  StockUpdateRequest,
+  StockUpdateResponse,
+  PnLReportResponse,
+} from '../types/admin'
 import { config } from '../config'
 
 const API_BASE = config.apiUrl
@@ -451,4 +457,38 @@ export async function checkApiHealth(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+// ============================================================================
+// INVENTORY API (Admin-facing)
+// ============================================================================
+
+export const inventoryApi = {
+  // Get all products with inventory levels (GET /popshop/admin/inventory)
+  async getAll(): Promise<ApiResponse<InventoryResponse>> {
+    return adminFetch<InventoryResponse>('/popshop/admin/inventory')
+  },
+
+  // Update stock quantity (POST /popshop/admin/inventory/update)
+  async updateStock(request: StockUpdateRequest): Promise<ApiResponse<StockUpdateResponse>> {
+    return adminFetch<StockUpdateResponse>('/popshop/admin/inventory/update', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  },
+}
+
+// ============================================================================
+// REPORTS API (Admin-facing)
+// ============================================================================
+
+export const reportsApi = {
+  // Get P&L report with date range (GET /popshop/admin/reports/pnl)
+  async getPnL(from?: string, to?: string): Promise<ApiResponse<PnLReportResponse>> {
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    const query = params.toString()
+    return adminFetch<PnLReportResponse>(`/popshop/admin/reports/pnl${query ? `?${query}` : ''}`)
+  },
 }

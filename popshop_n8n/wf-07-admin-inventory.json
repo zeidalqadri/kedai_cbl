@@ -1,0 +1,217 @@
+{
+  "name": "CBL-Popshop-07-Admin-Inventory",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "popshop/admin/inventory",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "get-webhook",
+      "name": "GET Inventory",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 200],
+      "webhookId": "popshop-admin-inventory-get",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L7j6V9fwqAW2mVNn",
+          "name": "Cryptico Admin Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.id, p.name, p.base_price, p.cost_price, COALESCE(json_agg(json_build_object('size_id', pi.size_id, 'quantity', pi.quantity, 'reserved', pi.reserved_quantity, 'available', pi.quantity - pi.reserved_quantity, 'low_threshold', pi.low_stock_threshold, 'is_low_stock', pi.quantity <= pi.low_stock_threshold, 'is_out_of_stock', pi.quantity <= 0)) FILTER (WHERE pi.size_id IS NOT NULL), '[]'::json) as inventory FROM products p LEFT JOIN product_inventory pi ON p.id = pi.product_id WHERE p.is_active = true GROUP BY p.id ORDER BY p.name;",
+        "options": {}
+      },
+      "id": "fetch-inventory",
+      "name": "Fetch Inventory",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 200],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const products = $input.all().map(item => {\n  const row = item.json;\n  return {\n    id: row.id,\n    name: row.name,\n    base_price: parseFloat(row.base_price) || 0,\n    cost_price: parseFloat(row.cost_price) || 0,\n    inventory: row.inventory || []\n  };\n});\n\n// Calculate summary stats\nlet totalValue = 0;\nlet lowStockCount = 0;\nlet outOfStockCount = 0;\n\nfor (const product of products) {\n  for (const inv of product.inventory) {\n    totalValue += inv.quantity * product.cost_price;\n    if (inv.is_out_of_stock) outOfStockCount++;\n    else if (inv.is_low_stock) lowStockCount++;\n  }\n}\n\nreturn [{\n  json: {\n    success: true,\n    products,\n    summary: {\n      total_value: totalValue,\n      low_stock_count: lowStockCount,\n      out_of_stock_count: outOfStockCount\n    }\n  }\n}];"
+      },
+      "id": "format-get-response",
+      "name": "Format GET Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "get-response",
+      "name": "GET Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "popshop/admin/inventory/update",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "post-webhook",
+      "name": "POST Update Stock",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 500],
+      "webhookId": "popshop-admin-inventory-update",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L7j6V9fwqAW2mVNn",
+          "name": "Cryptico Admin Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\n\n// Validate required fields\nconst productId = body.product_id;\nconst sizeId = body.size_id;\nconst quantity = parseInt(body.quantity);\nconst updateType = body.update_type || 'set'; // 'set', 'add', 'subtract'\nconst notes = body.notes || '';\n\nif (!productId || !sizeId) {\n  return [{ json: { valid: false, error: 'Missing product_id or size_id' } }];\n}\n\nif (isNaN(quantity)) {\n  return [{ json: { valid: false, error: 'Invalid quantity value' } }];\n}\n\nif (!['set', 'add', 'subtract'].includes(updateType)) {\n  return [{ json: { valid: false, error: 'Invalid update_type. Use: set, add, subtract' } }];\n}\n\nreturn [{\n  json: {\n    valid: true,\n    productId,\n    sizeId,\n    quantity,\n    updateType,\n    notes\n  }\n}];"
+      },
+      "id": "validate-update",
+      "name": "Validate Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-check",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid",
+      "name": "If Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH old_stock AS (\n  SELECT quantity FROM product_inventory \n  WHERE product_id = '{{ $json.productId }}' AND size_id = '{{ $json.sizeId }}'\n),\nupdated AS (\n  INSERT INTO product_inventory (product_id, size_id, quantity)\n  VALUES ('{{ $json.productId }}', '{{ $json.sizeId }}', \n    CASE '{{ $json.updateType }}'\n      WHEN 'set' THEN {{ $json.quantity }}\n      WHEN 'add' THEN {{ $json.quantity }}\n      ELSE 0\n    END\n  )\n  ON CONFLICT (product_id, size_id) DO UPDATE SET\n    quantity = CASE '{{ $json.updateType }}'\n      WHEN 'set' THEN {{ $json.quantity }}\n      WHEN 'add' THEN product_inventory.quantity + {{ $json.quantity }}\n      WHEN 'subtract' THEN GREATEST(0, product_inventory.quantity - {{ $json.quantity }})\n    END,\n    updated_at = NOW()\n  RETURNING quantity\n),\nlog_entry AS (\n  INSERT INTO inventory_transactions (product_id, size_id, quantity_change, transaction_type, notes)\n  SELECT '{{ $json.productId }}', '{{ $json.sizeId }}',\n    CASE '{{ $json.updateType }}'\n      WHEN 'set' THEN (SELECT quantity FROM updated) - COALESCE((SELECT quantity FROM old_stock), 0)\n      WHEN 'add' THEN {{ $json.quantity }}\n      WHEN 'subtract' THEN -{{ $json.quantity }}\n    END,\n    'admin_{{ $json.updateType }}',\n    '{{ $json.notes }}'\n  RETURNING id\n)\nSELECT (SELECT quantity FROM updated) as new_quantity, (SELECT id FROM log_entry) as transaction_id;",
+        "options": {}
+      },
+      "id": "update-stock",
+      "name": "Update Stock",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [920, 400],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validate Update').first().json;\nconst result = $input.first().json;\n\nreturn [{\n  json: {\n    success: true,\n    product_id: input.productId,\n    size_id: input.sizeId,\n    new_quantity: result[0]?.new_quantity || result.new_quantity || 0,\n    transaction_id: result[0]?.transaction_id || result.transaction_id,\n    message: `Stock updated successfully (${input.updateType}: ${input.quantity})`\n  }\n}];"
+      },
+      "id": "format-update-response",
+      "name": "Format Update Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "post-success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.error || 'Validation failed' }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "post-error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 600]
+    }
+  ],
+  "connections": {
+    "GET Inventory": {
+      "main": [[{ "node": "Fetch Inventory", "type": "main", "index": 0 }]]
+    },
+    "Fetch Inventory": {
+      "main": [[{ "node": "Format GET Response", "type": "main", "index": 0 }]]
+    },
+    "Format GET Response": {
+      "main": [[{ "node": "GET Response", "type": "main", "index": 0 }]]
+    },
+    "POST Update Stock": {
+      "main": [[{ "node": "Validate Update", "type": "main", "index": 0 }]]
+    },
+    "Validate Update": {
+      "main": [[{ "node": "If Valid", "type": "main", "index": 0 }]]
+    },
+    "If Valid": {
+      "main": [
+        [{ "node": "Update Stock", "type": "main", "index": 0 }],
+        [{ "node": "Error Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Update Stock": {
+      "main": [[{ "node": "Format Update Response", "type": "main", "index": 0 }]]
+    },
+    "Format Update Response": {
+      "main": [[{ "node": "Success Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "name": "CBL-Popshop-08-Admin-Reports",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "popshop/admin/reports/pnl",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "pnl-webhook",
+      "name": "GET P&L Report",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "popshop-admin-reports-pnl",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L7j6V9fwqAW2mVNn",
+          "name": "Cryptico Admin Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.first().json.query || {};\n\n// Parse date range\nlet fromDate = query.from;\nlet toDate = query.to;\n\n// Default to last 30 days if not specified\nconst now = new Date();\nif (!toDate) {\n  toDate = now.toISOString().split('T')[0];\n}\nif (!fromDate) {\n  const thirtyDaysAgo = new Date(now);\n  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);\n  fromDate = thirtyDaysAgo.toISOString().split('T')[0];\n}\n\n// Add time component for inclusive range\nconst fromDateTime = `${fromDate}T00:00:00.000Z`;\nconst toDateTime = `${toDate}T23:59:59.999Z`;\n\nreturn [{\n  json: {\n    fromDate,\n    toDate,\n    fromDateTime,\n    toDateTime\n  }\n}];"
+      },
+      "id": "parse-dates",
+      "name": "Parse Dates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  COALESCE(SUM(total) FILTER (WHERE status NOT IN ('cancelled', 'refunded')), 0) as gross_revenue,\n  COALESCE(SUM(items_cost) FILTER (WHERE status NOT IN ('cancelled', 'refunded')), 0) as total_cogs,\n  COALESCE(SUM(shipping_cost) FILTER (WHERE status NOT IN ('cancelled', 'refunded')), 0) as shipping_costs,\n  COALESCE(SUM(profit) FILTER (WHERE status NOT IN ('cancelled', 'refunded')), 0) as gross_profit,\n  COUNT(*) FILTER (WHERE status NOT IN ('cancelled', 'refunded')) as completed_orders,\n  COUNT(*) as total_orders,\n  COUNT(*) FILTER (WHERE status = 'delivered') as delivered_count,\n  COUNT(*) FILTER (WHERE status = 'shipped') as shipped_count,\n  COUNT(*) FILTER (WHERE status = 'processing') as processing_count,\n  COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed_count,\n  COUNT(*) FILTER (WHERE status = 'pending') as pending_count,\n  COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_count,\n  COUNT(*) FILTER (WHERE status = 'refunded') as refunded_count\nFROM popshop_orders\nWHERE created_at BETWEEN '{{ $json.fromDateTime }}' AND '{{ $json.toDateTime }}';",
+        "options": {}
+      },
+      "id": "fetch-pnl",
+      "name": "Fetch P&L Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [700, 300],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  DATE(created_at) as date,\n  COUNT(*) as orders,\n  COALESCE(SUM(total) FILTER (WHERE status NOT IN ('cancelled', 'refunded')), 0) as revenue,\n  COALESCE(SUM(profit) FILTER (WHERE status NOT IN ('cancelled', 'refunded')), 0) as profit\nFROM popshop_orders\nWHERE created_at BETWEEN '{{ $('Parse Dates').first().json.fromDateTime }}' AND '{{ $('Parse Dates').first().json.toDateTime }}'\nGROUP BY DATE(created_at)\nORDER BY date DESC;",
+        "options": {}
+      },
+      "id": "fetch-daily",
+      "name": "Fetch Daily Breakdown",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [920, 300],
+      "credentials": {
+        "postgres": {
+          "id": "XBVFwEM8RKk32yyj",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const dates = $('Parse Dates').first().json;\nconst pnlRaw = $('Fetch P&L Data').first().json;\nconst dailyRaw = $('Fetch Daily Breakdown').all().map(item => item.json);\n\n// Parse P&L data (handle array or single object)\nconst pnl = Array.isArray(pnlRaw) ? pnlRaw[0] : pnlRaw;\n\nconst grossRevenue = parseFloat(pnl.gross_revenue) || 0;\nconst totalCogs = parseFloat(pnl.total_cogs) || 0;\nconst shippingCosts = parseFloat(pnl.shipping_costs) || 0;\nconst grossProfit = parseFloat(pnl.gross_profit) || 0;\nconst completedOrders = parseInt(pnl.completed_orders) || 0;\nconst totalOrders = parseInt(pnl.total_orders) || 0;\n\n// Calculate metrics\nconst profitMargin = grossRevenue > 0 ? (grossProfit / grossRevenue) * 100 : 0;\nconst avgOrderValue = completedOrders > 0 ? grossRevenue / completedOrders : 0;\n\n// Format daily breakdown\nconst daily = dailyRaw.map(d => ({\n  date: d.date,\n  orders: parseInt(d.orders) || 0,\n  revenue: parseFloat(d.revenue) || 0,\n  profit: parseFloat(d.profit) || 0\n}));\n\nreturn [{\n  json: {\n    success: true,\n    date_range: {\n      from: dates.fromDate,\n      to: dates.toDate\n    },\n    pnl: {\n      gross_revenue: grossRevenue,\n      total_cogs: totalCogs,\n      shipping_costs: shippingCosts,\n      gross_profit: grossProfit,\n      profit_margin: Math.round(profitMargin * 100) / 100,\n      avg_order_value: Math.round(avgOrderValue * 100) / 100\n    },\n    orders: {\n      total: totalOrders,\n      completed: completedOrders,\n      delivered: parseInt(pnl.delivered_count) || 0,\n      shipped: parseInt(pnl.shipped_count) || 0,\n      processing: parseInt(pnl.processing_count) || 0,\n      confirmed: parseInt(pnl.confirmed_count) || 0,\n      pending: parseInt(pnl.pending_count) || 0,\n      cancelled: parseInt(pnl.cancelled_count) || 0,\n      refunded: parseInt(pnl.refunded_count) || 0\n    },\n    daily_breakdown: daily,\n    generated_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 300]
+    }
+  ],
+  "connections": {
+    "GET P&L Report": {
+      "main": [[{ "node": "Parse Dates", "type": "main", "index": 0 }]]
+    },
+    "Parse Dates": {
+      "main": [[{ "node": "Fetch P&L Data", "type": "main", "index": 0 }]]
+    },
+    "Fetch P&L Data": {
+      "main": [[{ "node": "Fetch Daily Breakdown", "type": "main", "index": 0 }]]
+    },
+    "Fetch Daily Breakdown": {
+      "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]]
+    },
+    "Format Response": {
+      "main": [[{ "node": "Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
