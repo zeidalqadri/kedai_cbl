@@ -130,7 +130,7 @@ export function ProcessingScreen({ shop }: ProcessingScreenProps) {
               </div>
               <div className="flex justify-between">
                 <span className={text.secondary}>Total</span>
-                <span className={cx(text.price)}>RM {polledOrder.total.toFixed(2)}</span>
+                <span className={cx(text.price)}>RM {Number(polledOrder.total).toFixed(2)}</span>
               </div>
               {polledOrder.trackingNumber && (
                 <div className="pt-2 border-t border-white/10">
@@ -239,7 +239,7 @@ export function ProcessingScreen({ shop }: ProcessingScreenProps) {
               <div className="flex justify-between text-sm">
                 <span className={text.secondary}>Total</span>
                 <span className={cx(text.price)}>
-                  RM {currentOrder.total.toFixed(2)}
+                  RM {Number(currentOrder.total).toFixed(2)}
                 </span>
               </div>
             </div>

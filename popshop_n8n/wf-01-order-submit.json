@@ -6,7 +6,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "popshop/order/submit",
-        "authentication": "headerAuth",
+        "authentication": "none",
         "responseMode": "responseNode",
         "options": { "rawBody": false }
       },
@@ -15,8 +15,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [260, 300],
-      "webhookId": "popshop-order-submit",
-      "credentials": { "httpHeaderAuth": { "id": "B9IPRA0h6bahkCwZ", "name": "Cryptico API Key" } }
+      "webhookId": "popshop-order-submit"
     },
     {
       "parameters": {
