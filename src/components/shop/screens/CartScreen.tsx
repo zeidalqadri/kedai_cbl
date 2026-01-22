@@ -125,7 +125,7 @@ export function CartScreen({ shop }: CartScreenProps) {
             {/* Free Shipping Progress */}
             <div className={cx(ui.card, 'p-4 mt-4')}>
               <div className="flex items-center gap-3">
-                <TruckIcon className={hasFreeShipping ? 'text-emerald-400' : 'text-white/40'} />
+                <TruckIcon className={cx('w-5 h-5 flex-shrink-0', hasFreeShipping ? 'text-emerald-400' : 'text-white/40')} />
                 <div className="flex-1">
                   {hasFreeShipping ? (
                     <p className="text-emerald-400 font-medium">Free shipping unlocked!</p>
