@@ -42,6 +42,27 @@ WHERE pi.product_id = updates.product_id AND pi.size_id = updates.size_id
 f7696ab fix(n8n): use unnest() for multi-item inventory batch update
 ```
 
+## Test Results - Multi-Item Order Verified
+
+**Test Order:** `PSMKQJ6IP3` (2026-01-23 15:00 MYT)
+
+| Item | Size | Qty | Price |
+|------|------|-----|-------|
+| CBL Basketball | 7 | 1 | RM 89 |
+| CBL Jingga T-Shirt | M | 2 | RM 69 |
+
+**Response:** `{"success":true, "profit":92, "inventoryUpdated":true}`
+
+**Inventory Changes:**
+| Product | Before | After | Status |
+|---------|--------|-------|--------|
+| Basketball (7) | 30 | 29 | ✅ |
+| T-Shirt (M) | 50 | 48 | ✅ |
+
+**Transaction Log:** Both items recorded with correct quantity changes.
+
+---
+
 ## Verification Commands
 
 ```bash

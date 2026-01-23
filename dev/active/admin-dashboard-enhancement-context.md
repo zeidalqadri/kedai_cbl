@@ -44,6 +44,10 @@ RETURNING pi.product_id, pi.size_id, pi.quantity
 
 **Deployed:** 2026-01-23 06:34:32 UTC to workflow `bvKiGfaIZTNBtlgK`
 
+**Verified:** 2026-01-23 15:00 MYT - Test order `PSMKQJ6IP3` with 2 items:
+- Basketball (7): 30 → 29 ✅
+- T-Shirt (M): 50 → 48 ✅
+
 ### Issue 2: Historical Orders Backfill
 
 **Problem:** 26 orders had `items_cost = NULL` and `profit = NULL`
