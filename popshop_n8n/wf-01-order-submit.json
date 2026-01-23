@@ -58,39 +58,95 @@
     },
     {
       "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id, cost_price FROM products WHERE id IN ({{ $json.productIds.map(id => \"'\" + id + \"'\").join(', ') }})",
+        "options": {}
+      },
+      "id": "18-lookup-costs",
+      "name": "18-lookup-costs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 200],
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } }
+    },
+    {
+      "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const input = $input.first().json;\nconst config = input._config;\n\n// Generate order ID: PS-<timestamp><random>\nconst orderId = 'PS' + Date.now().toString(36).toUpperCase().substring(0, 6) + Math.random().toString(36).substring(2, 4).toUpperCase();\nconst idempotencyKey = input.idempotencyKey || (orderId + '-' + Date.now());\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  _config: config,\n  order: {\n    id: orderId,\n    idempotency_key: idempotencyKey,\n    items: JSON.stringify(input.items),\n    subtotal: input.subtotal,\n    shipping_fee: input.shippingFee,\n    total: input.total,\n    customer_name: input.customer.name,\n    customer_phone: input.customer.phone,\n    customer_email: input.customer.email,\n    shipping_address: JSON.stringify(input.customer.address),\n    payment_ref: input.paymentRef || null,\n    has_proof_image: !!input.proofImageBase64,\n    status: 'pending',\n    created_at: now,\n    updated_at: now\n  },\n  input: input,\n  proofImageBase64: input.proofImageBase64 || null\n} }];"
+        "jsCode": "// Get validated input and product costs\nconst validatedInput = $('06-validation-gate').first().json;\nconst costResults = $input.all();\nconst config = validatedInput._config;\nconst items = validatedInput.items;\n\n// Build cost lookup map from database results\nconst costMap = {};\nfor (const row of costResults) {\n  if (row.json && row.json.id) {\n    costMap[row.json.id] = parseFloat(row.json.cost_price) || 0;\n  }\n}\n\n// Calculate total items cost\nlet itemsCost = 0;\nfor (const item of items) {\n  const unitCost = costMap[item.productId] || 0;\n  itemsCost += unitCost * item.quantity;\n}\n\n// Calculate profit (revenue - cost)\nconst profit = validatedInput.total - itemsCost - validatedInput.shippingFee;\n\n// Generate order ID: PS-<timestamp><random>\nconst orderId = 'PS' + Date.now().toString(36).toUpperCase().substring(0, 6) + Math.random().toString(36).substring(2, 4).toUpperCase();\nconst idempotencyKey = validatedInput.idempotencyKey || (orderId + '-' + Date.now());\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  _config: config,\n  order: {\n    id: orderId,\n    idempotency_key: idempotencyKey,\n    items: JSON.stringify(items),\n    subtotal: validatedInput.subtotal,\n    shipping_fee: validatedInput.shippingFee,\n    total: validatedInput.total,\n    items_cost: itemsCost,\n    shipping_cost: validatedInput.shippingFee,\n    profit: profit,\n    customer_name: validatedInput.customer.name,\n    customer_phone: validatedInput.customer.phone,\n    customer_email: validatedInput.customer.email,\n    shipping_address: JSON.stringify(validatedInput.customer.address),\n    payment_ref: validatedInput.paymentRef || null,\n    has_proof_image: !!validatedInput.proofImageBase64,\n    status: 'pending',\n    created_at: now,\n    updated_at: now\n  },\n  input: validatedInput,\n  proofImageBase64: validatedInput.proofImageBase64 || null,\n  costMap: costMap\n} }];"
       },
       "id": "20-generate-order",
       "name": "20-generate-order",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1140, 200]
+      "position": [1360, 200],
+      "notesInFlow": true,
+      "notes": "Calculates items_cost and profit from product costs"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=INSERT INTO popshop_orders (order_id, idempotency_key, items, subtotal, shipping_fee, total, customer_name, customer_phone, customer_email, shipping_address, payment_ref, has_proof_image, status, created_at, updated_at) VALUES ('{{ $json.order.id }}', '{{ $json.order.idempotency_key }}', '{{ $json.order.items }}', {{ $json.order.subtotal }}, {{ $json.order.shipping_fee }}, {{ $json.order.total }}, '{{ $json.order.customer_name }}', '{{ $json.order.customer_phone }}', '{{ $json.order.customer_email }}', '{{ $json.order.shipping_address }}', {{ $json.order.payment_ref ? \"'\" + $json.order.payment_ref + \"'\" : 'NULL' }}, {{ $json.order.has_proof_image }}, '{{ $json.order.status }}', '{{ $json.order.created_at }}', '{{ $json.order.updated_at }}') RETURNING *",
+        "query": "=INSERT INTO popshop_orders (order_id, idempotency_key, items, subtotal, shipping_fee, total, items_cost, shipping_cost, profit, customer_name, customer_phone, customer_email, shipping_address, payment_ref, has_proof_image, status, created_at, updated_at) VALUES ('{{ $json.order.id }}', '{{ $json.order.idempotency_key }}', '{{ $json.order.items }}', {{ $json.order.subtotal }}, {{ $json.order.shipping_fee }}, {{ $json.order.total }}, {{ $json.order.items_cost }}, {{ $json.order.shipping_cost }}, {{ $json.order.profit }}, '{{ $json.order.customer_name }}', '{{ $json.order.customer_phone }}', '{{ $json.order.customer_email }}', '{{ $json.order.shipping_address }}', {{ $json.order.payment_ref ? \"'\" + $json.order.payment_ref + \"'\" : 'NULL' }}, {{ $json.order.has_proof_image }}, '{{ $json.order.status }}', '{{ $json.order.created_at }}', '{{ $json.order.updated_at }}') RETURNING *",
         "options": {}
       },
       "id": "25-insert-order",
       "name": "25-insert-order",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1360, 200],
+      "position": [1580, 200],
       "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } },
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const orderData = $('20-generate-order').first().json;\nconst config = orderData._config;\nconst order = orderData.order;\nconst items = orderData.input.items;\nconst proofImageBase64 = orderData.proofImageBase64;\n\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\n\n// Build items list\nlet itemsList = items.map(item => `  • ${item.productName} (${item.size}) x${item.quantity} - ${formatMYR(item.price * item.quantity)}`).join('\\n');\nlet itemsHtml = items.map(item => `<li>${item.productName} (${item.size}) x${item.quantity} - ${formatMYR(item.price * item.quantity)}</li>`).join('');\n\nconst address = orderData.input.customer.address;\nconst addressStr = `${address.line1}${address.line2 ? ', ' + address.line2 : ''}, ${address.postcode} ${address.city}, ${address.state}`;\n\nconst telegramMessage = `🏀 <b>NEW CBL POPSHOP ORDER</b>\\n\\n📋 <b>Order ID:</b> <code>${order.id}</code>\\n\\n🛒 <b>Items:</b>\\n${itemsList}\\n\\n💰 <b>Subtotal:</b> ${formatMYR(order.subtotal)}\\n🚚 <b>Shipping:</b> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}\\n💵 <b>Total:</b> ${formatMYR(order.total)}\\n\\n👤 <b>Customer:</b>\\n├ Name: ${order.customer_name}\\n├ Phone: ${order.customer_phone}\\n├ Email: ${order.customer_email}\\n└ Address: ${addressStr}\\n\\n💳 <b>Payment Ref:</b> ${order.payment_ref || '(see attached screenshot)'}\\n📷 <b>Proof Image:</b> ${order.has_proof_image ? '✅ Attached below' : '❌ None'}\\n📅 <b>Time:</b> ${new Date(order.created_at).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}\\n\\n⏳ <b>Status:</b> Awaiting payment verification`;\n\nconst emailSubject = `🏀 New Order ${order.id} - ${formatMYR(order.total)} - ACTION REQUIRED`;\nconst emailHtml = `<h2>🏀 New CBL Popshop Order</h2>\n<p><strong>Order ID:</strong> ${order.id}</p>\n<h3>Items:</h3><ul>${itemsHtml}</ul>\n<p><strong>Subtotal:</strong> ${formatMYR(order.subtotal)}<br>\n<strong>Shipping:</strong> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}<br>\n<strong>Total:</strong> ${formatMYR(order.total)}</p>\n<h3>Customer:</h3>\n<p>Name: ${order.customer_name}<br>\nPhone: ${order.customer_phone}<br>\nEmail: ${order.customer_email}<br>\nAddress: ${addressStr}</p>\n<p><strong>Payment Ref:</strong> ${order.payment_ref || '(screenshot attached/uploaded)'}<br>\n<strong>Proof Image:</strong> ${order.has_proof_image ? 'Yes - check admin dashboard' : 'None'}</p>\n<p><strong>Time:</strong> ${new Date(order.created_at).toLocaleString('en-MY')}</p>\n<hr>\n<p>⚠️ <strong>ACTION REQUIRED:</strong> Please verify payment and update order status in admin dashboard.</p>\n<p>🔗 <a href=\"https://cbl-popshop.pages.dev/admin\">Open Admin Dashboard</a></p>`;\n\nconst inlineKeyboard = {\n  inline_keyboard: [\n    [\n      { text: '✅ Verify Payment', callback_data: `popshop_paid_${order.id}` },\n      { text: '❌ Cancel', callback_data: `popshop_cancel_${order.id}` }\n    ]\n  ]\n};\n\nreturn [{ json: { _config: config, order: order, telegramMessage, emailSubject, emailHtml, inlineKeyboard, proofImageBase64 } }];"
+        "jsCode": "// Get order data from previous node\nconst orderData = $('20-generate-order').first().json;\nconst items = orderData.input.items;\nconst orderId = orderData.order.id;\n\n// Build inventory update statements\n// Each item has: productId, size, quantity\nconst updates = [];\nconst transactions = [];\n\nfor (const item of items) {\n  // Decrement inventory for each item\n  updates.push({\n    product_id: item.productId,\n    size_id: item.size,\n    quantity: item.quantity\n  });\n  \n  // Prepare transaction log entry\n  transactions.push({\n    product_id: item.productId,\n    size_id: item.size,\n    quantity_change: -item.quantity,\n    transaction_type: 'order_placed',\n    reference_id: orderId,\n    notes: `Order ${orderId}: ${item.productName} x${item.quantity}`\n  });\n}\n\nreturn [{ json: {\n  ...orderData,\n  inventoryUpdates: updates,\n  inventoryTransactions: transactions\n} }];"
+      },
+      "id": "26-prepare-inventory-update",
+      "name": "26-prepare-inventory-update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 200],
+      "notesInFlow": true,
+      "notes": "Prepares inventory decrement data for each item"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH inventory_updates AS (\n  {{ $json.inventoryUpdates.map((u, i) => \n    `UPDATE product_inventory SET quantity = quantity - ${u.quantity}, updated_at = NOW() WHERE product_id = '${u.product_id}' AND size_id = '${u.size_id}' RETURNING product_id, size_id, quantity`\n  ).join(' UNION ALL ') }}\n)\nSELECT * FROM inventory_updates",
+        "options": {}
+      },
+      "id": "27-decrement-inventory",
+      "name": "27-decrement-inventory",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2020, 200],
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO inventory_transactions (product_id, size_id, quantity_change, transaction_type, reference_id, notes, created_at) VALUES {{ $('26-prepare-inventory-update').first().json.inventoryTransactions.map(t => `('${t.product_id}', '${t.size_id}', ${t.quantity_change}, '${t.transaction_type}', '${t.reference_id}', '${t.notes.replace(/'/g, \"''\")}', NOW())`).join(', ') }}",
+        "options": {}
+      },
+      "id": "28-log-inventory-transaction",
+      "name": "28-log-inventory-transaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2240, 200],
+      "credentials": { "postgres": { "id": "XBVFwEM8RKk32yyj", "name": "Cryptico PostgreSQL" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const orderData = $('26-prepare-inventory-update').first().json;\nconst config = orderData._config;\nconst order = orderData.order;\nconst items = orderData.input.items;\nconst proofImageBase64 = orderData.proofImageBase64;\n\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\n\n// Build items list\nlet itemsList = items.map(item => `  • ${item.productName} (${item.size}) x${item.quantity} - ${formatMYR(item.price * item.quantity)}`).join('\\n');\nlet itemsHtml = items.map(item => `<li>${item.productName} (${item.size}) x${item.quantity} - ${formatMYR(item.price * item.quantity)}</li>`).join('');\n\nconst address = orderData.input.customer.address;\nconst addressStr = `${address.line1}${address.line2 ? ', ' + address.line2 : ''}, ${address.postcode} ${address.city}, ${address.state}`;\n\nconst telegramMessage = `🏀 <b>NEW CBL POPSHOP ORDER</b>\\n\\n📋 <b>Order ID:</b> <code>${order.id}</code>\\n\\n🛒 <b>Items:</b>\\n${itemsList}\\n\\n💰 <b>Subtotal:</b> ${formatMYR(order.subtotal)}\\n🚚 <b>Shipping:</b> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}\\n💵 <b>Total:</b> ${formatMYR(order.total)}\\n📊 <b>Profit:</b> ${formatMYR(order.profit)}\\n\\n👤 <b>Customer:</b>\\n├ Name: ${order.customer_name}\\n├ Phone: ${order.customer_phone}\\n├ Email: ${order.customer_email}\\n└ Address: ${addressStr}\\n\\n💳 <b>Payment Ref:</b> ${order.payment_ref || '(see attached screenshot)'}\\n📷 <b>Proof Image:</b> ${order.has_proof_image ? '✅ Attached below' : '❌ None'}\\n📅 <b>Time:</b> ${new Date(order.created_at).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}\\n\\n⏳ <b>Status:</b> Awaiting payment verification\\n📦 <b>Inventory:</b> ✅ Auto-decremented`;\n\nconst emailSubject = `🏀 New Order ${order.id} - ${formatMYR(order.total)} - ACTION REQUIRED`;\nconst emailHtml = `<h2>🏀 New CBL Popshop Order</h2>\n<p><strong>Order ID:</strong> ${order.id}</p>\n<h3>Items:</h3><ul>${itemsHtml}</ul>\n<p><strong>Subtotal:</strong> ${formatMYR(order.subtotal)}<br>\n<strong>Shipping:</strong> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}<br>\n<strong>Total:</strong> ${formatMYR(order.total)}<br>\n<strong>Profit:</strong> ${formatMYR(order.profit)}</p>\n<h3>Customer:</h3>\n<p>Name: ${order.customer_name}<br>\nPhone: ${order.customer_phone}<br>\nEmail: ${order.customer_email}<br>\nAddress: ${addressStr}</p>\n<p><strong>Payment Ref:</strong> ${order.payment_ref || '(screenshot attached/uploaded)'}<br>\n<strong>Proof Image:</strong> ${order.has_proof_image ? 'Yes - check admin dashboard' : 'None'}</p>\n<p><strong>Time:</strong> ${new Date(order.created_at).toLocaleString('en-MY')}</p>\n<hr>\n<p>⚠️ <strong>ACTION REQUIRED:</strong> Please verify payment and update order status in admin dashboard.</p>\n<p>🔗 <a href=\"https://cbl-popshop.pages.dev/admin\">Open Admin Dashboard</a></p>`;\n\nconst inlineKeyboard = {\n  inline_keyboard: [\n    [\n      { text: '✅ Verify Payment', callback_data: `popshop_paid_${order.id}` },\n      { text: '❌ Cancel', callback_data: `popshop_cancel_${order.id}` }\n    ]\n  ]\n};\n\nreturn [{ json: { _config: config, order: order, telegramMessage, emailSubject, emailHtml, inlineKeyboard, proofImageBase64 } }];"
       },
       "id": "30-format-telegram",
       "name": "30-format-notifications",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1580, 200]
+      "position": [2460, 200]
     },
     {
       "parameters": {
@@ -105,7 +161,7 @@
       "name": "31-check-proof-image",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1800, 200]
+      "position": [2680, 200]
     },
     {
       "parameters": {
@@ -116,7 +172,7 @@
       "name": "32-prepare-image",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2020, 100]
+      "position": [2900, 100]
     },
     {
       "parameters": {
@@ -138,7 +194,7 @@
       "name": "33-send-proof-image",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2240, 100],
+      "position": [3120, 100],
       "onError": "continueRegularOutput"
     },
     {
@@ -154,7 +210,7 @@
       "name": "35-send-telegram-with-buttons",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2460, 100],
+      "position": [3340, 100],
       "onError": "continueRegularOutput"
     },
     {
@@ -170,7 +226,7 @@
       "name": "35-send-telegram-no-image",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2020, 300],
+      "position": [2900, 300],
       "onError": "continueRegularOutput"
     },
     {
@@ -182,7 +238,7 @@
       "name": "36-check-telegram-result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2680, 200]
+      "position": [3560, 200]
     },
     {
       "parameters": {
@@ -197,7 +253,7 @@
       "name": "37-telegram-failed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2900, 200]
+      "position": [3780, 200]
     },
     {
       "parameters": {
@@ -212,20 +268,20 @@
       "name": "38-send-email-fallback",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [3120, 100],
+      "position": [4000, 100],
       "credentials": { "smtp": { "id": "hCZX1kGIsQ2X1cVZ", "name": "Gmail SMTP" } },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const data = $('30-format-notifications').first().json;\nconst order = data.order;\n\nreturn [{ json: {\n  ok: true,\n  success: true,\n  orderId: order.id,\n  status: 'pending',\n  total: order.total,\n  estimatedDelivery: '3-5 business days after payment verification',\n  message: `Order ${order.id} submitted successfully. You will receive updates via email.`,\n  trackingUrl: `/popshop/order/lookup?id=${order.id}`\n} }];"
+        "jsCode": "const data = $('30-format-notifications').first().json;\nconst order = data.order;\n\nreturn [{ json: {\n  ok: true,\n  success: true,\n  orderId: order.id,\n  status: 'pending',\n  total: order.total,\n  profit: order.profit,\n  inventoryUpdated: true,\n  estimatedDelivery: '3-5 business days after payment verification',\n  message: `Order ${order.id} submitted successfully. Inventory has been updated. You will receive updates via email.`,\n  trackingUrl: `/popshop/order/lookup?id=${order.id}`\n} }];"
       },
       "id": "55-format-response",
       "name": "55-format-response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3340, 200]
+      "position": [4220, 200]
     },
     {
       "parameters": {
@@ -237,7 +293,7 @@
       "name": "60-reply-success",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [3560, 200]
+      "position": [4440, 200]
     },
     {
       "parameters": {
@@ -261,18 +317,18 @@
       "name": "99-reply-database-error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1580, 400]
+      "position": [1800, 400]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Get order data from format-notifications node\nconst notificationData = $('30-format-notifications').first().json;\nconst order = notificationData.order;\nconst items = $('20-generate-order').first().json.input.items;\nconst proofImageBase64 = notificationData.proofImageBase64;\nconst config = notificationData._config;\n\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\n\n// Parse shipping address\nconst address = JSON.parse(order.shipping_address);\nconst addressStr = `${address.line1}${address.line2 ? ', ' + address.line2 : ''}<br>${address.postcode} ${address.city}, ${address.state}`;\n\n// Build items table rows\nlet itemRows = items.map(item => \n  `<tr><td style=\"padding: 8px 0; border-bottom: 1px solid #e5e7eb;\">${item.productName} (${item.size}) x${item.quantity}</td><td style=\"padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;\">${formatMYR(item.price * item.quantity)}</td></tr>`\n).join('');\n\nconst customerEmailHtml = `<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n  <h1 style=\"color: #f97316;\">🏀 CBL Popshop</h1>\n  <p>Hi ${order.customer_name},</p>\n  <p>Thank you for your order!</p>\n\n  <div style=\"background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;\">\n    <p style=\"margin: 0; font-size: 14px; color: #666;\">Order ID</p>\n    <p style=\"margin: 4px 0 0 0; font-size: 24px; font-weight: bold; font-family: monospace;\">${order.id}</p>\n  </div>\n\n  <h3 style=\"margin-top: 24px;\">Order Details</h3>\n  <table style=\"width: 100%; border-collapse: collapse;\">\n    ${itemRows}\n  </table>\n  <div style=\"margin-top: 16px;\">\n    <p style=\"margin: 4px 0;\"><strong>Subtotal:</strong> ${formatMYR(order.subtotal)}</p>\n    <p style=\"margin: 4px 0;\"><strong>Shipping:</strong> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}</p>\n    <p style=\"margin: 4px 0; font-size: 18px;\"><strong>Total:</strong> ${formatMYR(order.total)}</p>\n  </div>\n\n  <h3 style=\"margin-top: 24px;\">Shipping To</h3>\n  <p>${addressStr}</p>\n\n  <h3 style=\"margin-top: 24px;\">What's Next?</h3>\n  <ol style=\"padding-left: 20px;\">\n    <li style=\"margin-bottom: 8px;\">We'll verify your payment</li>\n    <li style=\"margin-bottom: 8px;\">Your order will be processed</li>\n    <li style=\"margin-bottom: 8px;\">You'll receive tracking info when shipped</li>\n  </ol>\n\n  <p style=\"margin-top: 24px;\"><a href=\"https://cbl-popshop.pages.dev/lookup?id=${order.id}\" style=\"display: inline-block; background: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;\">Track Your Order</a></p>\n\n  <hr style=\"margin: 24px 0; border: none; border-top: 1px solid #e5e7eb;\">\n  <p style=\"color: #666; font-size: 12px;\">Questions? Contact us at @cblpopshop on Telegram</p>\n</div>`;\n\nconst customerEmailSubject = `🏀 Order ${order.id} Confirmed - CBL Popshop`;\n\n// Prepare output with or without image binary\nlet output = {\n  json: {\n    _config: config,\n    order: order,\n    customerEmail: order.customer_email,\n    customerEmailSubject,\n    customerEmailHtml,\n    hasProofImage: !!proofImageBase64\n  }\n};\n\n// If we have proof image, include it as binary for attachment\nif (proofImageBase64) {\n  let imageData = proofImageBase64;\n  if (proofImageBase64.includes(',')) {\n    imageData = proofImageBase64.split(',')[1];\n  }\n  output.binary = {\n    proofImage: {\n      data: imageData,\n      mimeType: 'image/png',\n      fileName: `payment_proof_${order.id}.png`\n    }\n  };\n}\n\nreturn [output];"
+        "jsCode": "// Get order data from format-notifications node\nconst notificationData = $('30-format-notifications').first().json;\nconst order = notificationData.order;\nconst inventoryData = $('26-prepare-inventory-update').first().json;\nconst items = inventoryData.input.items;\nconst proofImageBase64 = notificationData.proofImageBase64;\nconst config = notificationData._config;\n\nconst formatMYR = (amount) => `RM ${Number(amount).toFixed(2)}`;\n\n// Parse shipping address\nconst address = JSON.parse(order.shipping_address);\nconst addressStr = `${address.line1}${address.line2 ? ', ' + address.line2 : ''}<br>${address.postcode} ${address.city}, ${address.state}`;\n\n// Build items table rows\nlet itemRows = items.map(item => \n  `<tr><td style=\"padding: 8px 0; border-bottom: 1px solid #e5e7eb;\">${item.productName} (${item.size}) x${item.quantity}</td><td style=\"padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;\">${formatMYR(item.price * item.quantity)}</td></tr>`\n).join('');\n\nconst customerEmailHtml = `<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n  <h1 style=\"color: #f97316;\">🏀 CBL Popshop</h1>\n  <p>Hi ${order.customer_name},</p>\n  <p>Thank you for your order!</p>\n\n  <div style=\"background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;\">\n    <p style=\"margin: 0; font-size: 14px; color: #666;\">Order ID</p>\n    <p style=\"margin: 4px 0 0 0; font-size: 24px; font-weight: bold; font-family: monospace;\">${order.id}</p>\n  </div>\n\n  <h3 style=\"margin-top: 24px;\">Order Details</h3>\n  <table style=\"width: 100%; border-collapse: collapse;\">\n    ${itemRows}\n  </table>\n  <div style=\"margin-top: 16px;\">\n    <p style=\"margin: 4px 0;\"><strong>Subtotal:</strong> ${formatMYR(order.subtotal)}</p>\n    <p style=\"margin: 4px 0;\"><strong>Shipping:</strong> ${order.shipping_fee === 0 ? 'FREE' : formatMYR(order.shipping_fee)}</p>\n    <p style=\"margin: 4px 0; font-size: 18px;\"><strong>Total:</strong> ${formatMYR(order.total)}</p>\n  </div>\n\n  <h3 style=\"margin-top: 24px;\">Shipping To</h3>\n  <p>${addressStr}</p>\n\n  <h3 style=\"margin-top: 24px;\">What's Next?</h3>\n  <ol style=\"padding-left: 20px;\">\n    <li style=\"margin-bottom: 8px;\">We'll verify your payment</li>\n    <li style=\"margin-bottom: 8px;\">Your order will be processed</li>\n    <li style=\"margin-bottom: 8px;\">You'll receive tracking info when shipped</li>\n  </ol>\n\n  <p style=\"margin-top: 24px;\"><a href=\"https://cbl-popshop.pages.dev/lookup?id=${order.id}\" style=\"display: inline-block; background: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;\">Track Your Order</a></p>\n\n  <hr style=\"margin: 24px 0; border: none; border-top: 1px solid #e5e7eb;\">\n  <p style=\"color: #666; font-size: 12px;\">Questions? Contact us at @cblpopshop on Telegram</p>\n</div>`;\n\nconst customerEmailSubject = `🏀 Order ${order.id} Confirmed - CBL Popshop`;\n\n// Prepare output with or without image binary\nlet output = {\n  json: {\n    _config: config,\n    order: order,\n    customerEmail: order.customer_email,\n    customerEmailSubject,\n    customerEmailHtml,\n    hasProofImage: !!proofImageBase64\n  }\n};\n\n// If we have proof image, include it as binary for attachment\nif (proofImageBase64) {\n  let imageData = proofImageBase64;\n  if (proofImageBase64.includes(',')) {\n    imageData = proofImageBase64.split(',')[1];\n  }\n  output.binary = {\n    proofImage: {\n      data: imageData,\n      mimeType: 'image/png',\n      fileName: `payment_proof_${order.id}.png`\n    }\n  };\n}\n\nreturn [output];"
       },
       "id": "40-format-customer-email",
       "name": "40-format-customer-email",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3340, 0]
+      "position": [4220, 0]
     },
     {
       "parameters": {
@@ -289,18 +345,34 @@
       "name": "41-send-customer-email",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [3560, 0],
+      "position": [4440, 0],
       "credentials": { "smtp": { "id": "hCZX1kGIsQ2X1cVZ", "name": "Gmail SMTP" } },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Extract unique product IDs from validated input to query costs\nconst input = $input.first().json;\nconst items = input.items;\n\n// Get unique product IDs\nconst productIds = [...new Set(items.map(item => item.productId))];\n\nreturn [{ json: { ...input, productIds } }];"
+      },
+      "id": "17-extract-product-ids",
+      "name": "17-extract-product-ids",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 100]
     }
   ],
   "connections": {
     "01-trigger-webhook": { "main": [[ { "node": "02-config", "type": "main", "index": 0 } ]] },
     "02-config": { "main": [[ { "node": "05-validate-input", "type": "main", "index": 0 } ]] },
     "05-validate-input": { "main": [[ { "node": "06-validation-gate", "type": "main", "index": 0 } ]] },
-    "06-validation-gate": { "main": [[ { "node": "20-generate-order", "type": "main", "index": 0 } ], [ { "node": "99-reply-validation-error", "type": "main", "index": 0 } ]] },
+    "06-validation-gate": { "main": [[ { "node": "17-extract-product-ids", "type": "main", "index": 0 } ], [ { "node": "99-reply-validation-error", "type": "main", "index": 0 } ]] },
+    "17-extract-product-ids": { "main": [[ { "node": "18-lookup-costs", "type": "main", "index": 0 } ]] },
+    "18-lookup-costs": { "main": [[ { "node": "20-generate-order", "type": "main", "index": 0 } ]] },
     "20-generate-order": { "main": [[ { "node": "25-insert-order", "type": "main", "index": 0 } ]] },
-    "25-insert-order": { "main": [[ { "node": "30-format-notifications", "type": "main", "index": 0 } ], [ { "node": "99-reply-database-error", "type": "main", "index": 0 } ]] },
+    "25-insert-order": { "main": [[ { "node": "26-prepare-inventory-update", "type": "main", "index": 0 } ], [ { "node": "99-reply-database-error", "type": "main", "index": 0 } ]] },
+    "26-prepare-inventory-update": { "main": [[ { "node": "27-decrement-inventory", "type": "main", "index": 0 } ]] },
+    "27-decrement-inventory": { "main": [[ { "node": "28-log-inventory-transaction", "type": "main", "index": 0 } ]] },
+    "28-log-inventory-transaction": { "main": [[ { "node": "30-format-notifications", "type": "main", "index": 0 } ]] },
     "30-format-notifications": { "main": [[ { "node": "31-check-proof-image", "type": "main", "index": 0 } ]] },
     "31-check-proof-image": { "main": [[ { "node": "32-prepare-image", "type": "main", "index": 0 } ], [ { "node": "35-send-telegram-no-image", "type": "main", "index": 0 } ]] },
     "32-prepare-image": { "main": [[ { "node": "33-send-proof-image", "type": "main", "index": 0 } ]] },
@@ -315,5 +387,5 @@
     "55-format-response": { "main": [[ { "node": "60-reply-success", "type": "main", "index": 0 } ]] }
   },
   "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
-  "tags": [{ "name": "cbl-popshop" }, { "name": "order-submit" }]
+  "tags": [{ "name": "cbl-popshop" }, { "name": "order-submit" }, { "name": "inventory" }]
 }
