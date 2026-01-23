@@ -1,7 +1,7 @@
 # Admin Dashboard Enhancement - Context
 
-**Last Updated:** 2026-01-23 21:15 MYT
-**Status:** ✅ COMPLETE - Committed, pushed, deployed, tested
+**Last Updated:** 2026-01-23 14:45 MYT
+**Status:** ✅ COMPLETE - All known issues resolved
 
 ## Implementation Summary
 
@@ -10,6 +10,49 @@ Enhanced the CBL Popshop admin dashboard with:
 2. **Inventory management** with per-size stock tracking
 3. **P&L reporting** with date range filtering
 4. **Order workflow with auto inventory decrement and profit calculation**
+
+---
+
+## Session 2026-01-23 14:30 MYT: Known Issues Fixed
+
+### Issue 1: Multi-item Inventory Decrement (Node 27)
+
+**Problem:** Node 27's SQL used `UNION ALL` between UPDATE statements - PostgreSQL doesn't support this. Only first item's inventory was being decremented.
+
+**Original (broken):**
+```sql
+WITH inventory_updates AS (
+  UPDATE ... RETURNING * UNION ALL UPDATE ... RETURNING *
+)
+SELECT * FROM inventory_updates
+```
+
+**Fixed (working):**
+```sql
+UPDATE product_inventory pi
+SET quantity = quantity - updates.qty, updated_at = NOW()
+FROM (
+  SELECT
+    unnest(ARRAY[{{product_ids}}]) as product_id,
+    unnest(ARRAY[{{size_ids}}]) as size_id,
+    unnest(ARRAY[{{quantities}}]::int[]) as qty
+) AS updates
+WHERE pi.product_id = updates.product_id
+  AND pi.size_id = updates.size_id
+RETURNING pi.product_id, pi.size_id, pi.quantity
+```
+
+**Deployed:** 2026-01-23 06:34:32 UTC to workflow `bvKiGfaIZTNBtlgK`
+
+### Issue 2: Historical Orders Backfill
+
+**Problem:** 26 orders had `items_cost = NULL` and `profit = NULL`
+
+**Solution:**
+- Legacy orders (without cost data in items array) backfilled with `profit = total - shipping_fee`
+- Orders with cost data in items array properly calculated
+
+**Result:** 27 orders now have valid profit values, total profit: RM 3,214.50
 
 ---
 
@@ -164,13 +207,16 @@ pm2 status alumist-n8n
 
 ## Known Limitations
 
-1. **Old orders show RM 0.00 profit** - Orders created before this update don't have `items_cost` data
-2. **Products must exist in database** - Order fails if `productId` doesn't match a product in `products` table
-3. **Single item inventory update** - Current workflow only handles first item for inventory update (needs loop for multi-item orders)
+1. **Products must exist in database** - Order fails if `productId` doesn't match a product in `products` table
+2. **Legacy orders show estimated profit** - Orders before cost tracking use `profit = total - shipping_fee` (items_cost = 0)
+
+## Resolved Issues (This Session)
+
+1. ~~Multi-item inventory updates~~ → ✅ Fixed with `unnest()` batch UPDATE
+2. ~~Historical orders NULL profit~~ → ✅ Backfilled 27 orders
 
 ## Potential Future Enhancements
 
-1. Fix multi-item inventory updates (currently only first item is decremented)
-2. Add inventory restock on order cancellation
-3. Backfill `items_cost` for historical orders
-4. Add low stock alerts to Telegram notifications
+1. Add inventory restock on order cancellation
+2. Add low stock alerts to Telegram notifications
+3. Improve legacy order cost calculation by product name matching

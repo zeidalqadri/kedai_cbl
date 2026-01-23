@@ -112,7 +112,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=WITH inventory_updates AS (\n  {{ $json.inventoryUpdates.map((u, i) => \n    `UPDATE product_inventory SET quantity = quantity - ${u.quantity}, updated_at = NOW() WHERE product_id = '${u.product_id}' AND size_id = '${u.size_id}' RETURNING product_id, size_id, quantity`\n  ).join(' UNION ALL ') }}\n)\nSELECT * FROM inventory_updates",
+        "query": "=UPDATE product_inventory pi\nSET quantity = quantity - updates.qty, updated_at = NOW()\nFROM (\n  SELECT\n    unnest(ARRAY[{{ $json.inventoryUpdates.map(u => `'${u.product_id}'`).join(', ') }}]) as product_id,\n    unnest(ARRAY[{{ $json.inventoryUpdates.map(u => `'${u.size_id}'`).join(', ') }}]) as size_id,\n    unnest(ARRAY[{{ $json.inventoryUpdates.map(u => u.quantity).join(', ') }}]::int[]) as qty\n) AS updates\nWHERE pi.product_id = updates.product_id\n  AND pi.size_id = updates.size_id\nRETURNING pi.product_id, pi.size_id, pi.quantity",
         "options": {}
       },
       "id": "27-decrement-inventory",
